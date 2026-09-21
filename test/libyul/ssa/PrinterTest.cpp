@@ -22,6 +22,7 @@
 #include <test/Common.h>
 
 #include <libyul/backends/evm/ssa/SSACFGBuilder.h>
+#include <libyul/backends/evm/ssa/io/Parser.h>
 #include <libyul/backends/evm/ssa/transform/OptimizationPipeline.h>
 
 #include <libyul/AsmAnalysis.h>
@@ -71,6 +72,9 @@ TestCase::TestResult PrinterTest::run(std::ostream& _stream, std::string const& 
 	);
 	yul::ssa::transform::optimize(*controlFlowGraphs);
 	m_obtainedResult = controlFlowGraphs->print();
+	// the parser accepts exactly what the printer produces, and gives the same numbering back
+	std::string const reprinted = yul::ssa::io::parse(m_obtainedResult, *evmDialect)->print();
+	soltestAssert(reprinted == m_obtainedResult, "the printed graph does not round-trip through the parser:\n" + reprinted);
 
 	return checkResult(_stream, _linePrefix, _formatted);
 }

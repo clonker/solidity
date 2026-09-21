@@ -31,6 +31,10 @@ public:
 	static std::unique_ptr<TestCase> create(Config const& _config);
 	explicit ControlFlowGraphTest(std::string const& _filename);
 	TestResult run(std::ostream& _stream, std::string const& _linePrefix = "", bool const _formatted = false) override;
+
+private:
+	/// the source is a graph in the printer's syntax rather than Yul
+	bool m_isSSACFGText = false;
 };
 
 }

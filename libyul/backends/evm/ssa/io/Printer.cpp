@@ -55,6 +55,16 @@ std::string formatBlockRef(BlockId const _id)
 	return fmt::format("#{}", _id.value);
 }
 
+/// `@name`, or `@name#id` if another function graph carries the same name (Yul scopes allow that)
+std::string formatFunctionRef(ControlFlowGraphs const& _module, FunctionGraphID const _id)
+{
+	SSACFG const& graph = *_module.functionGraph(_id);
+	bool ambiguous = false;
+	for (auto const& other: _module.functionGraphs)
+		ambiguous |= other.get() != &graph && other->name == graph.name;
+	return ambiguous ? fmt::format("@{}#{}", graph.name, _id) : fmt::format("@{}", graph.name);
+}
+
 void printBuiltinOperands(
 	std::ostream& _out,
 	SSACFG const& _cfg,
@@ -100,10 +110,7 @@ void printCallOperands(
 )
 {
 	auto const& payload = _cfg.callPayload(_id);
-	SSACFG const* callee = _module.functionGraph(payload.graphID);
-	yulAssert(callee);
-
-	_out << fmt::format("call @{}", callee->name);
+	_out << fmt::format("call {}", formatFunctionRef(_module, payload.graphID));
 
 	if (_inst.inputs.empty())
 		return;
@@ -276,15 +283,15 @@ void printBlock(
 	printExit(_out, block);
 }
 
-void printGraph(std::ostream& _out, ControlFlowGraphs const& _module, SSACFG const& _cfg)
+void printGraph(std::ostream& _out, ControlFlowGraphs const& _module, SSACFG const& _cfg, FunctionGraphID const _id)
 {
 	bool const wrapIntoFunc = !_cfg.isMainGraph();
 
 	if (wrapIntoFunc)
 	{
 		_out << fmt::format(
-			"func @{}(args: ({})) -> {}",
-			_cfg.name,
+			"func {}(args: ({})) -> {}",
+			formatFunctionRef(_module, _id),
 			fmt::join(_cfg.arguments | ranges::views::transform(formatValueRef), ", "),
 			_cfg.numReturns
 		);
@@ -311,9 +318,9 @@ void io::print(std::ostream& _out, ControlFlowGraphs const& _cfgs)
 	if (_cfgs.memoryGuard)
 		_out << fmt::format("memoryguard = {}\n\n", toCompactHexWithPrefix(*_cfgs.memoryGuard));
 
-	for (auto const& graph: _cfgs.functionGraphs)
+	for (std::size_t id = 0; id < _cfgs.functionGraphs.size(); ++id)
 	{
-		printGraph(_out, _cfgs, *graph);
+		printGraph(_out, _cfgs, *_cfgs.functionGraphs[id], static_cast<FunctionGraphID>(id));
 		_out << '\n';
 	}
 }

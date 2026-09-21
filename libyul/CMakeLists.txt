@@ -113,6 +113,8 @@ add_library(yul
 	backends/evm/ssa/io/DotExporterBase.h
 	backends/evm/ssa/io/JSONExporter.cpp
 	backends/evm/ssa/io/JSONExporter.h
+	backends/evm/ssa/io/Parser.cpp
+	backends/evm/ssa/io/Parser.h
 	backends/evm/ssa/io/Printer.cpp
 	backends/evm/ssa/io/Printer.h
 	backends/evm/ssa/spill/Emitter.h

@@ -22,6 +22,7 @@
 #include <test/Common.h>
 
 #include <libyul/backends/evm/ssa/SSACFGBuilder.h>
+#include <libyul/backends/evm/ssa/io/Parser.h>
 
 #include <libyul/backends/evm/ssa/transform/OptimizationPipeline.h>
 
@@ -58,30 +59,38 @@ ControlFlowGraphTest::ControlFlowGraphTest(std::string const& _filename): TestCa
 	m_source = m_reader.source();
 	auto dialectName = m_reader.stringSetting("dialect", "evm");
 	soltestAssert(dialectName == "evm"); // We only have one dialect now
+	// a graph written down in the printer's syntax is taken as it is, no transform runs on it
+	m_isSSACFGText = _filename.ends_with(".ssacfg");
 	m_expectation = m_reader.simpleExpectations();
 }
 
 TestCase::TestResult ControlFlowGraphTest::run(std::ostream& _stream, std::string const& _linePrefix, bool const _formatted)
 {
-	YulStack yulStack = parseYul(m_source);
-	solUnimplementedAssert(yulStack.parserResult()->subObjects.empty(), "Tests with subobjects not supported.");
-
-	if (yulStack.hasErrors())
+	std::unique_ptr<yul::ssa::ControlFlowGraphs> controlFlowGraphs;
+	if (m_isSSACFGText)
+		controlFlowGraphs = yul::ssa::io::parse(m_source, EVMDialect::strictAssemblyForEVMObjects(solidity::test::CommonOptions::get().evmVersion()));
+	else
 	{
-		printYulErrors(yulStack, _stream, _linePrefix, _formatted);
-		return TestResult::FatalError;
+		YulStack yulStack = parseYul(m_source);
+		solUnimplementedAssert(yulStack.parserResult()->subObjects.empty(), "Tests with subobjects not supported.");
+
+		if (yulStack.hasErrors())
+		{
+			printYulErrors(yulStack, _stream, _linePrefix, _formatted);
+			return TestResult::FatalError;
+		}
+
+		auto const* evmDialect = dynamic_cast<EVMDialect const*>(&yulStack.dialect());
+		yulAssert(evmDialect);
+
+		controlFlowGraphs = yul::ssa::SSACFGBuilder::build(
+			*yulStack.parserResult()->analysisInfo,
+			*evmDialect,
+			yulStack.parserResult()->code()->root(),
+			true
+		);
+		yul::ssa::transform::optimize(*controlFlowGraphs);
 	}
-
-	auto const* evmDialect = dynamic_cast<EVMDialect const*>(&yulStack.dialect());
-	yulAssert(evmDialect);
-
-	std::unique_ptr<yul::ssa::ControlFlowGraphs> controlFlowGraphs = yul::ssa::SSACFGBuilder::build(
-		*yulStack.parserResult()->analysisInfo,
-		*evmDialect,
-		yulStack.parserResult()->code()->root(),
-		true
-	);
-	yul::ssa::transform::optimize(*controlFlowGraphs);
 	yul::ssa::ControlFlowGraphsLiveness liveness(*controlFlowGraphs);
 	m_obtainedResult = controlFlowGraphs->toDot(&liveness);
 

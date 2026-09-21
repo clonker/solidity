@@ -1,0 +1,79 @@
+// A counting loop written down in the printer's syntax: the graph is taken as it is, no transform runs on it.
+#0:
+    v0 = const 0x00
+    v1 = builtin @calldataload v0
+    v2 = const 0x0a
+    v3 = const 0x01
+    upsilon v0 -> ^v4
+    upsilon v1 -> ^v5
+    jump #1
+#1: preds: #0, #3
+    v4 = phi
+    v5 = phi
+    v6 = builtin @lt v4, v2
+    branch v6, #2, #4
+#2: preds: #1
+    v7 = builtin @mload v4
+    v8 = builtin @add v5, v7
+    jump #3
+#3: preds: #2
+    v9 = builtin @add v4, v3
+    upsilon v9 -> ^v4
+    upsilon v8 -> ^v5
+    jump #1
+#4: preds: #1
+    builtin @sstore v3, v5
+    main_exit
+// ----
+// digraph SSACFG {
+// nodesep=0.7;
+// graph[fontname="DejaVu Sans"]
+// node[shape=box,fontname="DejaVu Sans"];
+//
+// Entry [label="Entry"];
+// Entry -> Block0_0;
+// Block0_0 [fillcolor="#FF746C", style=filled, label="\
+// Block 0; (0, max 4)\nLiveIn: \l\
+// LiveOut: v1[1]\l\nUsed: \l\nv1 := calldataload(0x00)\l\
+// "];
+// Block0_0 -> Block0_0Exit [arrowhead=none];
+// Block0_0Exit [label="Jump" shape=oval];
+// Block0_0Exit -> Block0_1 [style="solid"];
+// Block0_1 [label="\
+// Block 1; (1, max 4)\nLiveIn: phi4[4], phi5[2]\l\
+// LiveOut: phi4[2], phi5[1]\l\nUsed: phi4[2], phi5[1]\l\nphi4 := φ(\l\
+// 	Block 0 => 0x00,\l\
+// 	Block 3 => v9\l\
+// )\l\
+// phi5 := φ(\l\
+// 	Block 0 => v1,\l\
+// 	Block 3 => v8\l\
+// )\l\
+// v6 := lt(phi4, 0x0a)\l\
+// "];
+// Block0_1 -> Block0_1Exit;
+// Block0_1Exit [label="{ If v6 | { <0> Zero | <1> NonZero }}" shape=Mrecord];
+// Block0_1Exit:0 -> Block0_4 [style="solid"];
+// Block0_1Exit:1 -> Block0_2 [style="solid"];
+// Block0_2 [label="\
+// Block 2; (2, max 3)\nLiveIn: phi4[2], phi5[1]\l\
+// LiveOut: v8[1], phi4[1]\l\nUsed: phi4[1], phi5[1]\l\nv7 := mload(phi4)\l\
+// v8 := add(phi5, v7)\l\
+// "];
+// Block0_2 -> Block0_2Exit [arrowhead=none];
+// Block0_2Exit [label="Jump" shape=oval];
+// Block0_2Exit -> Block0_3 [style="solid"];
+// Block0_4 [fillcolor="#FF746C", style=filled, label="\
+// Block 4; (4, max 4)\nLiveIn: phi5[1]\l\
+// LiveOut: \l\nUsed: phi5[1]\l\nsstore(0x01, phi5)\l\
+// "];
+// Block0_4Exit [label="MainExit"];
+// Block0_4 -> Block0_4Exit;
+// Block0_3 [label="\
+// Block 3; (3, max 3)\nLiveIn: v8[1], phi4[1]\l\
+// LiveOut: v9[1], v8[1]\l\nUsed: phi4[1]\l\nv9 := add(phi4, 0x01)\l\
+// "];
+// Block0_3 -> Block0_3Exit [arrowhead=none];
+// Block0_3Exit [label="Jump" shape=oval];
+// Block0_3Exit -> Block0_1 [style="dashed"];
+// }
