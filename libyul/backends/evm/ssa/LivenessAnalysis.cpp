@@ -22,6 +22,7 @@
 
 #include <boost/container/flat_map.hpp>
 
+#include <range/v3/algorithm/find.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/filter.hpp>
 #include <range/v3/view/reverse.hpp>
@@ -56,13 +57,105 @@ LivenessAnalysis::LivenessAnalysis(SSACFG const& _cfg):
 	m_topologicalSort(_cfg),
 	m_loopNestingForest(m_topologicalSort),
 	m_liveIns(_cfg.numBlocks()),
-	m_liveOuts(_cfg.numBlocks())
+	m_liveOuts(_cfg.numBlocks()),
+	m_shadowLiveIns(_cfg.numBlocks()),
+	m_shadowLiveOuts(_cfg.numBlocks())
 {
+	runShadowPathExploration();
 	runDagDfs();
 	for (auto const loopRootNode: m_loopNestingForest.loopRootNodes())
 		runLoopTreeDfs(loopRootNode);
 
 	fillOperationsLiveOut();
+}
+
+bool LivenessAnalysis::isUpsilonReadingAtPosition(InstId const _id) const
+{
+	return m_cfg.isUpsilon(_id) && !isLoweredOnEdge(_id) && shadowLiveBehind(_id, m_cfg.upsilonPhi(_id));
+}
+
+bool LivenessAnalysis::shadowLiveBehind(InstId const _id, InstId const _phi) const
+{
+	SSACFG::BlockId const blockId = m_cfg.inst(_id).block;
+	auto const& instructions = m_cfg.block(blockId).instructions;
+	auto it = ranges::find(instructions, _id);
+	yulAssert(it != instructions.end(), fmt::format("{} is not scheduled in its block", _id));
+	for (++it; it != instructions.end(); ++it)
+	{
+		if (*it == _phi)
+			return true;
+		if (m_cfg.isUpsilon(*it) && m_cfg.upsilonPhi(*it) == _phi)
+			return false;
+	}
+	return shadowLiveOut(blockId, _phi);
+}
+
+bool LivenessAnalysis::isLoweredOnEdge(InstId const _upsilon) const
+{
+	SSACFG::Inst const& upsilon = m_cfg.inst(_upsilon);
+	yulAssert(upsilon.isUpsilon());
+	InstId const phi = m_cfg.upsilonPhi(_upsilon);
+	SSACFG::BasicBlock const& block = m_cfg.block(upsilon.block);
+
+	if (auto const* conditionalJump = std::get_if<SSACFG::BasicBlock::ConditionalJump>(&block.exit))
+		if (shadowLiveIn(conditionalJump->nonZero, phi))
+			return false;
+
+	for (InstId const id: block.instructions | ranges::views::reverse)
+	{
+		if (id == _upsilon)
+			return true;
+		if (id == phi || m_cfg.isOperation(id))
+			return false;
+	}
+	yulAssert(false, fmt::format("upsilon {} is not scheduled in its block", _upsilon));
+	solidity::util::unreachable();
+}
+
+void LivenessAnalysis::runShadowPathExploration()
+{
+	std::vector<std::uint8_t> reachable(m_cfg.numBlocks(), false);
+	for (auto const blockIdValue: m_topologicalSort.preOrder())
+		reachable[blockIdValue] = true;
+
+	// the phis whose shadows each block writes
+	std::vector<ShadowSet> written(m_cfg.numBlocks());
+	for (auto const blockIdValue: m_topologicalSort.preOrder())
+		m_cfg.forEachUpsilon(m_cfg.block(SSACFG::BlockId{blockIdValue}), [&](InstId const _upsilon, SSACFG::Inst const&) {
+			written[blockIdValue].insert(m_cfg.upsilonPhi(_upsilon));
+		});
+
+	std::vector<SSACFG::BlockId> toVisit;
+	for (auto const blockIdValue: m_topologicalSort.preOrder())
+	{
+		SSACFG::BlockId const blockId{blockIdValue};
+		// the phis whose shadows the block writes ahead of the current Inst
+		ShadowSet writtenAhead;
+		for (InstId const id: m_cfg.block(blockId).instructions)
+		{
+			if (m_cfg.isUpsilon(id))
+				writtenAhead.insert(m_cfg.upsilonPhi(id));
+			// the phi reads its shadow: unless the block wrote it ahead of the phi, it is live on entry, and
+			// backwards from there up to the last upsilon for the phi on every path
+			if (!m_cfg.isPhi(id) || writtenAhead.contains(id))
+				continue;
+			yulAssert(blockId != m_cfg.entry, fmt::format("phi {} reads its shadow before any upsilon writes it", id));
+			m_shadowLiveIns[blockIdValue].insert(id);
+			toVisit.assign(m_cfg.block(blockId).entries.begin(), m_cfg.block(blockId).entries.end());
+			while (!toVisit.empty())
+			{
+				SSACFG::BlockId const predecessor = toVisit.back();
+				toVisit.pop_back();
+				if (!reachable[predecessor.value] || !m_shadowLiveOuts[predecessor.value].insert(id).second)
+					continue;
+				if (written[predecessor.value].contains(id) || !m_shadowLiveIns[predecessor.value].insert(id).second)
+					continue;
+				yulAssert(predecessor != m_cfg.entry, fmt::format("phi {} reads its shadow before any upsilon writes it", id));
+				auto const& entries = m_cfg.block(predecessor).entries;
+				toVisit.insert(toVisit.end(), entries.begin(), entries.end());
+			}
+		}
+	}
 }
 
 LivenessAnalysis::LivenessData LivenessAnalysis::used(SSACFG::BlockId const _blockId) const
@@ -82,12 +175,12 @@ void LivenessAnalysis::runDagDfs()
 		SSACFG::BlockId blockId{blockIdValue};
 		auto const& block = m_cfg.block(blockId);
 
-		// live <- PhiUses(B)
+		// live <- PhiUses(B), the inputs of the upsilons lowered on the block's out-edges whose writes are live
 		LivenessData live{};
-		m_cfg.forEachUpsilon(block, [&](InstId, SSACFG::Inst const& inst) {
+		m_cfg.forEachUpsilon(block, [&](InstId const instId, SSACFG::Inst const& inst) {
 			InstId const v = inst.inputs.at(0);
 			yulAssert(!m_cfg.isUnreachable(v));
-			if (!m_cfg.isLiteral(v))
+			if (!m_cfg.isLiteral(v) && isLoweredOnEdge(instId) && shadowLiveBehind(instId, m_cfg.upsilonPhi(instId)))
 				live.insert(v);
 		});
 
@@ -122,6 +215,8 @@ void LivenessAnalysis::runDagDfs()
 			for (InstId const instId: block.instructions | ranges::views::reverse)
 			{
 				auto const& inst = m_cfg.inst(instId);
+				if (isUpsilonReadingAtPosition(instId))
+					live.insertAll(inst.inputs | ranges::views::filter(excludingLiteralsFilter()));
 				if (!inst.isOperation())
 					continue;
 				// remove variables defined at p from live
@@ -176,6 +271,11 @@ void LivenessAnalysis::fillOperationsLiveOut()
 		for (InstId const instId: block.instructions | ranges::views::reverse)
 		{
 			auto const& inst = m_cfg.inst(instId);
+			if (isUpsilonReadingAtPosition(instId))
+			{
+				m_operationLiveOutByInst.emplace(instId.value, live);
+				live.insertAll(inst.inputs | ranges::views::filter(excludingLiteralsFilter()));
+			}
 			if (!inst.isOperation())
 				continue;
 			m_operationLiveOutByInst.emplace(instId.value, live);
