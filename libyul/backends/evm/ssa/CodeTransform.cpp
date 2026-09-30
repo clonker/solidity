@@ -222,7 +222,7 @@ void CodeTransform::operator()(SSACFG::BlockId const _blockId)
 
 	auto const& block = m_cfg.block(_blockId);
 
-	// the spilled shadow slots on the stack-in, since their values may arrive on the edges
+	// the spilled shadow slots that the incoming edges write
 	spillStore(_blockId);
 
 	// Iterate every Inst in the block in scheduled order with its recorded trace, then store the spilled variables it

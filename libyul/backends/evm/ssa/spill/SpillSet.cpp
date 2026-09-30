@@ -143,8 +143,11 @@ std::vector<DefSite> defSitesFor(
 	StackSlot const shadowSlot = StackSlot::makeShadow(_cfg, phi);
 	std::vector<DefSite> sites;
 	for (SSACFG::BlockId const blockId: _cfg.liveBlocks())
-		if (auto const& blockLayout = _layout[blockId]; blockLayout && ranges::contains(blockLayout->stackIn, shadowSlot))
+		if (auto const& blockLayout = _layout[blockId]; blockLayout && blockLayout->writesOnEntry(shadowSlot))
+		{
+			yulAssert(ranges::contains(blockLayout->stackIn, shadowSlot));
 			sites.push_back({blockId, shadowSlot, blockLayout->stackIn});
+		}
 	if (auto const it = _upsilonsByPhi.find(phi); it != _upsilonsByPhi.end())
 		for (InstId const upsilon: it->second)
 		{

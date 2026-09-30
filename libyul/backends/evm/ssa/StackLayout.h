@@ -50,6 +50,16 @@ struct BlockLayout
 		solidity::util::unreachable();
 	}
 
+	/// Whether the trace of an incoming edge writes the shadow slot `_shadow`, by renaming an upsilon input to it
+	bool writesOnEntry(StackSlot const& _shadow) const
+	{
+		for (auto const& [parent, trace]: tracesForStackIn)
+			for (ShuffleOp const& op: trace)
+				if (op.kind == ShuffleOp::Kind::Rename && op.slot == _shadow)
+					return true;
+		return false;
+	}
+
 	/// Records the shuffle for the edge from `_predecessor` into this block
 	void addTraceForStackIn(SSACFG::BlockId const& _predecessor, ShuffleTrace&& _trace)
 	{
