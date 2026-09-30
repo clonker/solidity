@@ -37,9 +37,8 @@ namespace solidity::yul::ssa::spill
 {
 
 /// Where a spilled variable is stored:
-/// - a value behind its defining Inst (a projection behind its operation, a phi behind the last phi of the run of phis
-///   it belongs to, unless it shares its key with its shadow slot), and a function argument on function entry, both
-///   keyed by the Inst it is stored behind;
+/// - a value behind its defining Inst (a projection behind its operation, a phi only if it does not share its key with
+///   its shadow slot), and a function argument on function entry, both keyed by the Inst it is stored behind;
 /// - a phi's shadow slot where it is written: on entry of every block whose incoming edges write it, keyed by the
 ///   block, and behind every upsilon at its position that writes it, keyed by the upsilon.
 using SpillStoreSite = std::variant<BlockId, InstId>;

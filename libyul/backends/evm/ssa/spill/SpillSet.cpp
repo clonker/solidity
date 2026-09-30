@@ -100,17 +100,10 @@ StackData defStackFor(
 	return replayInsts(_cfg, _layout, _cfg.inst(_site).block, positionInBlock(_cfg, _site) + 1);
 }
 
-/// The Inst behind which the value `_value` is stored: a projection behind its operation, a phi, which takes its value
-/// out of its shadow slot at its position, behind the last phi of the run of phis it belongs to
+/// The Inst behind which the value `_value` is stored: a projection behind its operation, any other value, including a
+/// phi, which takes its value out of its shadow slot at its position, right behind itself
 InstId storeSiteOf(SSACFG const& _cfg, InstId const _value)
 {
-	if (_cfg.isPhi(_value))
-	{
-		SSACFG::BlockId const blockId = _cfg.inst(_value).block;
-		yulAssert(blockId.hasValue(), fmt::format("phi {} has no defining block", _value));
-		SSACFG::BasicBlock const& block = _cfg.block(blockId);
-		return block.instructions[phiRunEnd(_cfg, block, positionInBlock(_cfg, _value)) - 1];
-	}
 	return _cfg.isProjection(_value) ? _cfg.inst(_value).inputs.front() : _value;
 }
 

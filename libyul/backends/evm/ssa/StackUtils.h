@@ -47,10 +47,6 @@ CallSites gatherCallSites(SSACFG const& _cfg);
 /// renames into place
 bool writesShadowSlot(ShuffleTrace const& _upsilonTrace);
 
-/// The index in `_block.instructions` right behind the run of consecutive phis that the phi at `_index` belongs to.
-/// Spilled phis are stored there, once every phi of the run has taken its value out of its shadow slot.
-std::size_t phiRunEnd(SSACFG const& _cfg, SSACFG::BasicBlock const& _block, std::size_t _index);
-
 /// Checks that _current and _desired have the same size and that each slot matches,
 /// treating junk slots in _desired as wildcards.
 ValidationResult checkLayoutCompatibility(StackData const& _current, StackData const& _desired);

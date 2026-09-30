@@ -113,14 +113,6 @@ bool solidity::yul::ssa::writesShadowSlot(ShuffleTrace const& _upsilonTrace)
 		_upsilonTrace.back().slot.isShadow();
 }
 
-std::size_t solidity::yul::ssa::phiRunEnd(SSACFG const& _cfg, SSACFG::BasicBlock const& _block, std::size_t _index)
-{
-	yulAssert(_index < _block.instructions.size() && _cfg.isPhi(_block.instructions[_index]));
-	while (_index < _block.instructions.size() && _cfg.isPhi(_block.instructions[_index]))
-		++_index;
-	return _index;
-}
-
 std::string ValidationResult::formatErrors() const
 {
 	return fmt::format("{}", fmt::join(m_errors, "\n"));
