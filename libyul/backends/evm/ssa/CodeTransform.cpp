@@ -540,6 +540,8 @@ void CodeTransform::emit(ShuffleOp const& _op)
 		}
 		case StackSlot::Kind::FunctionReturnLabel:
 			yulAssert(false, "Cannot produce function return label.");
+		case StackSlot::Kind::Shadow:
+			yulAssert(false, "Shadow slots are renamed into place, never pushed.");
 		}
 		solidity::util::unreachable();
 	case ShuffleOp::Kind::Load:
@@ -555,6 +557,8 @@ void CodeTransform::emit(ShuffleOp const& _op)
 			fmt::format("Tried storing variable {} without a spill slot", _op.slot)
 		);
 		m_spillEmitter->emitStore(_op.slot);
+		return;
+	case ShuffleOp::Kind::Rename:
 		return;
 	}
 	solidity::util::unreachable();
