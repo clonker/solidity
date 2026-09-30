@@ -19,7 +19,6 @@
 #include <libyul/backends/evm/ssa/CodeTransform.h>
 
 #include <libyul/backends/evm/ssa/CallGraph.h>
-#include <libyul/backends/evm/ssa/PhiInverse.h>
 #include <libyul/backends/evm/ssa/StackLayoutGenerator.h>
 #include <libyul/backends/evm/ssa/StackUtils.h>
 
@@ -29,6 +28,7 @@
 
 #include <libsolutil/Visitor.h>
 
+#include <range/v3/algorithm/all_of.hpp>
 #include <range/v3/view/take_last.hpp>
 #include <range/v3/view/zip.hpp>
 
@@ -222,19 +222,21 @@ void CodeTransform::operator()(SSACFG::BlockId const _blockId)
 
 	auto const& block = m_cfg.block(_blockId);
 
-	// Iterate every Inst in the block in scheduled order with its recorded trace. Only Operations advance codegen;
-	// Phis are otherwise pure stack assertions (already materialized on the block's stackIn).
+	// the spilled shadow slots on the stack-in, since their values may arrive on the edges
+	spillStore(_blockId);
+
+	// Iterate every Inst in the block in scheduled order with its recorded trace, then store the spilled variables it
+	// defines or writes. Phis take their values out of their shadow slots and upsilons realized at their position write
+	// them, both through their traces.
 	yulAssert(blockLayout->operationShuffles.size() == block.instructions.size());
 	for (auto const& [instId, trace]: ranges::views::zip(block.instructions, blockLayout->operationShuffles))
 	{
 		SSACFG::Inst const& inst = m_cfg.inst(instId);
-		if (inst.isPhi())
-			// this is a no-op for not spilled phis
-			spillStore(instId);
 		if (inst.isOperation())
 			(*this)(instId, trace);
 		else
-			yulAssert(trace.empty());
+			playback(trace);
+		spillStore(instId);
 	}
 
 	// Play back the recorded shuffle to the block's exit state before dispatching the exit.
@@ -360,11 +362,6 @@ void CodeTransform::operator()(InstId _instId, ShuffleTrace const& _operationShu
 	for (InstId const id: m_cfg.outputsOf(_instId))
 		m_stack.push(StackSlot::makeValue(m_cfg, id));
 
-	// Each output the layout decided to spill gets its `mstore` here
-	if (m_spillEmitter)
-		for (InstId const outputId: m_cfg.outputsOf(_instId))
-			spillStore(outputId);
-
 	yulAssert(m_stack.size() == baseHeight + numOutputs);
 	for (auto const& [stackEntry, output]: ranges::views::zip(
 		m_stack.data() | ranges::views::take_last(numOutputs),
@@ -377,23 +374,24 @@ void CodeTransform::operator()(InstId _instId, ShuffleTrace const& _operationShu
 	);
 }
 
-void CodeTransform::spillStore(InstId const _value)
+void CodeTransform::spillStore(spill::SpillStoreSite const _site)
 {
-	if (!m_spillEmitter || !m_spillSet.isSpilled(StackSlot::makeValue(m_cfg, _value)))
+	auto const it = m_spillStoreTraces.find(_site);
+	if (it == m_spillStoreTraces.end())
 		return;
 
-	// Play back the recorded def-site trace: it brings `_value` to the stack top and concludes with the
+	// Play back the recorded def-site traces: each brings its slot to the stack top and concludes with the
 	// `mstore` consuming it, leaving the rest of the stack in place.
-	auto const it = m_spillStoreTraces.find(_value);
-	yulAssert(it != m_spillStoreTraces.end(), fmt::format("no def-site store trace recorded for spilled value {}", _value));
-	ShuffleTrace const& storeTrace = it->second;
-	yulAssert(
-		!storeTrace.empty() &&
-		storeTrace.back().kind == ShuffleOp::Kind::Store &&
-		storeTrace.back().slot == StackSlot::makeValue(m_cfg, _value),
-		fmt::format("def-site trace for {} must conclude with its store", _value)
-	);
-	playback(storeTrace);
+	for (auto const& [slot, storeTrace]: it->second)
+	{
+		yulAssert(
+			!storeTrace.empty() &&
+			storeTrace.back().kind == ShuffleOp::Kind::Store &&
+			storeTrace.back().slot == slot,
+			fmt::format("def-site trace for {} must conclude with its store", slot)
+		);
+		playback(storeTrace);
+	}
 }
 
 void CodeTransform::operator()(SSACFG::BlockId const&, SSACFG::BasicBlock::MainExit const&)
@@ -427,6 +425,14 @@ void CodeTransform::operator()(SSACFG::BlockId const& _currentBlock, SSACFG::Bas
 	}
 	{
 		yulAssert(m_stackLayout[_conditionalJump.nonZero]);
+		// JUMPI enters the nonZero target directly: whatever code its edge carried would be dead
+		yulAssert(
+			ranges::all_of(
+				m_stackLayout[_conditionalJump.nonZero]->traceForStackIn(_currentBlock),
+				[](ShuffleOp const& _op) { return _op.kind == ShuffleOp::Kind::Rename; }
+			),
+			"The edge into the nonZero target of a conditional jump cannot carry code."
+		);
 		m_assembly.setStackHeight(static_cast<int>(m_stack.size()));
 		// transform stack to a state in which we can jump to the nonZero branch
 		prepareBlockExitStack(_currentBlock, _conditionalJump.nonZero);
@@ -546,17 +552,17 @@ void CodeTransform::emit(ShuffleOp const& _op)
 		solidity::util::unreachable();
 	case ShuffleOp::Kind::Load:
 		yulAssert(
-			m_spillEmitter && m_spillEmitter->hasAddress(_op.slot),
+			m_spillEmitter && m_spillEmitter->hasAddress(m_spillSet.keyOf(_op.slot)),
 			fmt::format("Tried bringing up non-spilled non-const {}", _op.slot)
 		);
-		m_spillEmitter->emitLoad(_op.slot);
+		m_spillEmitter->emitLoad(m_spillSet.keyOf(_op.slot));
 		return;
 	case ShuffleOp::Kind::Store:
 		yulAssert(
-			m_spillEmitter && m_spillEmitter->hasAddress(_op.slot),
+			m_spillEmitter && m_spillEmitter->hasAddress(m_spillSet.keyOf(_op.slot)),
 			fmt::format("Tried storing variable {} without a spill slot", _op.slot)
 		);
-		m_spillEmitter->emitStore(_op.slot);
+		m_spillEmitter->emitStore(m_spillSet.keyOf(_op.slot));
 		return;
 	case ShuffleOp::Kind::Rename:
 		return;
@@ -568,12 +574,10 @@ void CodeTransform::prepareBlockExitStack(SSACFG::BlockId const& _currentBlock, 
 {
 	auto const& targetLayout = m_stackLayout[_target];
 	yulAssert(targetLayout);
-	// pull back target to live in current variable space
-	auto const pulledBackTarget = stackPreImage(m_cfg, targetLayout->stackIn, PhiInverse(m_cfg, _currentBlock, _target));
-	// play back the recorded shuffle for this edge
+	// play back the recorded shuffle for this edge, which concludes with the writes of the upsilons lowered on it
 	playback(targetLayout->traceForStackIn(_currentBlock));
-	// check that the playback reproduced the edge target
-	assertLayoutCompatibility(m_stack.data(), pulledBackTarget);
-	// now we can simply set the target to the actual one which will take care of the application of phi functions
+	// check that the playback reproduced the target's stack-in
+	assertLayoutCompatibility(m_stack.data(), targetLayout->stackIn);
+	// the target's junk slots are wildcards: adopt them
 	m_stackData = targetLayout->stackIn;
 }

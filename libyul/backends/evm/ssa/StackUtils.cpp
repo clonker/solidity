@@ -71,18 +71,6 @@ std::size_t solidity::yul::ssa::stackOpsGas(SSACFG const& _cfg, ShuffleTrace con
 	return gas;
 }
 
-StackData solidity::yul::ssa::stackPreImage(SSACFG const& _cfg, StackData _stack, PhiInverse const& _phiInverse)
-{
-	if (!_phiInverse.noOp())
-		for (auto& slot: _stack)
-			if (slot.isValue())
-			{
-				auto const preImage = _phiInverse(slot.value());
-				slot = StackSlot::makeValue(_cfg, preImage);
-			}
-	return _stack;
-}
-
 CallSites solidity::yul::ssa::gatherCallSites(SSACFG const& _cfg)
 {
 	CallSites result;
@@ -115,6 +103,22 @@ CallSites solidity::yul::ssa::gatherCallSites(SSACFG const& _cfg)
 		}
 	}
 	return result;
+}
+
+bool solidity::yul::ssa::writesShadowSlot(ShuffleTrace const& _upsilonTrace)
+{
+	return
+		!_upsilonTrace.empty() &&
+		_upsilonTrace.back().kind == ShuffleOp::Kind::Rename &&
+		_upsilonTrace.back().slot.isShadow();
+}
+
+std::size_t solidity::yul::ssa::phiRunEnd(SSACFG const& _cfg, SSACFG::BasicBlock const& _block, std::size_t _index)
+{
+	yulAssert(_index < _block.instructions.size() && _cfg.isPhi(_block.instructions[_index]));
+	while (_index < _block.instructions.size() && _cfg.isPhi(_block.instructions[_index]))
+		++_index;
+	return _index;
 }
 
 std::string ValidationResult::formatErrors() const

@@ -95,9 +95,9 @@ protected:
 		for (auto const& [instId, trace]: ranges::views::zip(block.instructions, blockLayout->operationShuffles))
 		{
 			SSACFG::Inst const& inst = m_cfg.inst(instId);
+			replay(operationStack, trace);
 			if (!inst.isOperation())
 				continue;
-			replay(operationStack, trace);
 
 			_out << "\\l\\\n";
 			_out << stackToString(operationStack) << "\\l\\\n";

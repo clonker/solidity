@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <libyul/backends/evm/ssa/PhiInverse.h>
 #include <libyul/backends/evm/ssa/ShuffleTrace.h>
 #include <libyul/backends/evm/ssa/Stack.h>
 
@@ -42,10 +41,15 @@ private:
 /// Computes the EVM gas cost of executing `_trace`.
 std::size_t stackOpsGas(SSACFG const& _cfg, ShuffleTrace const& _trace);
 
-/// Transform stack data by replacing all its phi variables with their respective preimages.
-StackData stackPreImage(SSACFG const& _cfg, StackData _stack, PhiInverse const& _phiInverse);
-
 CallSites gatherCallSites(SSACFG const& _cfg);
+
+/// Whether the trace of an upsilon realized at its position wrote its phi's shadow slot, which the trace's last op
+/// renames into place
+bool writesShadowSlot(ShuffleTrace const& _upsilonTrace);
+
+/// The index in `_block.instructions` right behind the run of consecutive phis that the phi at `_index` belongs to.
+/// Spilled phis are stored there, once every phi of the run has taken its value out of its shadow slot.
+std::size_t phiRunEnd(SSACFG const& _cfg, SSACFG::BasicBlock const& _block, std::size_t _index);
 
 /// Checks that _current and _desired have the same size and that each slot matches,
 /// treating junk slots in _desired as wildcards.

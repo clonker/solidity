@@ -73,7 +73,7 @@ std::string describeCFG(
 	out += "  mstore schedule:\n";
 	for (const auto& key: _spilled | std::views::keys)
 	{
-		SSACFG::BlockId const block = _cfg.inst(key.value()).block;
+		SSACFG::BlockId const block = _cfg.inst(key.isShadow() ? key.shadowPhi() : key.value()).block;
 		out += fmt::format(
 			"    mstore addr({}) <- {} (B#{})\n",
 			key,
