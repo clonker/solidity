@@ -43,14 +43,14 @@ using namespace solidity::yul::ssa;
 namespace
 {
 /// The writes realized on the edge from `_from` into `_to`, as phi -> input: of the upsilons of `_from` lowered on its
-/// out-edges (see `LivenessAnalysis::isLoweredOnEdge`), the last one per phi whose shadow is live on entry of `_to`
+/// out-edge (see `isLoweredOnEdge`), the last one per phi whose shadow is live on entry of `_to`
 using EdgeWrites = std::map<InstId, InstId>;
 EdgeWrites edgeWrites(LivenessAnalysis const& _liveness, SSACFG::BlockId const _from, SSACFG::BlockId const _to)
 {
 	SSACFG const& cfg = _liveness.cfg();
 	EdgeWrites writes;
 	cfg.forEachUpsilon(cfg.block(_from), [&](InstId const _upsilon, SSACFG::Inst const& _inst) {
-		if (InstId const phi = cfg.upsilonPhi(_upsilon); _liveness.shadowLiveIn(_to, phi) && _liveness.isLoweredOnEdge(_upsilon))
+		if (InstId const phi = cfg.upsilonPhi(_upsilon); _liveness.shadowLiveIn(_to, phi) && isLoweredOnEdge(cfg, _upsilon))
 			writes[phi] = _inst.inputs.at(0);
 	});
 	return writes;
@@ -146,7 +146,7 @@ std::shared_ptr<std::set<InstId> const> phisSharingShadowKey(LivenessAnalysis co
 			InstId const phi = cfg.upsilonPhi(_upsilon);
 			if (!_liveness.shadowLiveBehind(_upsilon, phi))
 				return;
-			if (_liveness.isLoweredOnEdge(_upsilon))
+			if (isLoweredOnEdge(cfg, _upsilon))
 				block.forEachExit([&](SSACFG::BlockId const _successor) {
 					if (_liveness.shadowLiveIn(_successor, phi) && _liveness.liveIn(_successor).contains(phi))
 						interfering.insert(phi);
@@ -470,7 +470,7 @@ void StackLayoutGenerator::visitBlock(SSACFG::BlockId const& _blockId)
 			layoutOperation(instId, inst);
 		else if (inst.isPhi())
 			layoutPhi(instId);
-		else if (inst.isUpsilon() && !m_liveness.isLoweredOnEdge(instId))
+		else if (inst.isUpsilon() && !isLoweredOnEdge(m_cfg, instId))
 			layoutUpsilon(instId, inst);
 		else
 			blockLayout.operationShuffles.emplace_back();

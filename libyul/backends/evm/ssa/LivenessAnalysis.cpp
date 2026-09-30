@@ -52,6 +52,26 @@ LivenessAnalysis::LivenessData LivenessAnalysis::blockExitValues(SSACFG::BlockId
 	return result;
 }
 
+bool solidity::yul::ssa::isLoweredOnEdge(SSACFG const& _cfg, InstId const _upsilon)
+{
+	SSACFG::Inst const& upsilon = _cfg.inst(_upsilon);
+	yulAssert(upsilon.isUpsilon());
+	SSACFG::BasicBlock const& block = _cfg.block(upsilon.block);
+	if (!block.isJumpBlock())
+		return false;
+
+	InstId const phi = _cfg.upsilonPhi(_upsilon);
+	for (InstId const id: block.instructions | ranges::views::reverse)
+	{
+		if (id == _upsilon)
+			return true;
+		if (id == phi || _cfg.isOperation(id))
+			return false;
+	}
+	yulAssert(false, fmt::format("upsilon {} is not scheduled in its block", _upsilon));
+	solidity::util::unreachable();
+}
+
 LivenessAnalysis::LivenessAnalysis(SSACFG const& _cfg):
 	m_cfg(_cfg),
 	m_topologicalSort(_cfg),
@@ -71,7 +91,7 @@ LivenessAnalysis::LivenessAnalysis(SSACFG const& _cfg):
 
 bool LivenessAnalysis::isUpsilonReadingAtPosition(InstId const _id) const
 {
-	return m_cfg.isUpsilon(_id) && !isLoweredOnEdge(_id) && shadowLiveBehind(_id, m_cfg.upsilonPhi(_id));
+	return m_cfg.isUpsilon(_id) && !isLoweredOnEdge(m_cfg, _id) && shadowLiveBehind(_id, m_cfg.upsilonPhi(_id));
 }
 
 bool LivenessAnalysis::shadowLiveBehind(InstId const _id, InstId const _phi) const
@@ -88,28 +108,6 @@ bool LivenessAnalysis::shadowLiveBehind(InstId const _id, InstId const _phi) con
 			return false;
 	}
 	return shadowLiveOut(blockId, _phi);
-}
-
-bool LivenessAnalysis::isLoweredOnEdge(InstId const _upsilon) const
-{
-	SSACFG::Inst const& upsilon = m_cfg.inst(_upsilon);
-	yulAssert(upsilon.isUpsilon());
-	InstId const phi = m_cfg.upsilonPhi(_upsilon);
-	SSACFG::BasicBlock const& block = m_cfg.block(upsilon.block);
-
-	if (auto const* conditionalJump = std::get_if<SSACFG::BasicBlock::ConditionalJump>(&block.exit))
-		if (shadowLiveIn(conditionalJump->nonZero, phi))
-			return false;
-
-	for (InstId const id: block.instructions | ranges::views::reverse)
-	{
-		if (id == _upsilon)
-			return true;
-		if (id == phi || m_cfg.isOperation(id))
-			return false;
-	}
-	yulAssert(false, fmt::format("upsilon {} is not scheduled in its block", _upsilon));
-	solidity::util::unreachable();
 }
 
 void LivenessAnalysis::runShadowPathExploration()
@@ -175,12 +173,12 @@ void LivenessAnalysis::runDagDfs()
 		SSACFG::BlockId blockId{blockIdValue};
 		auto const& block = m_cfg.block(blockId);
 
-		// live <- PhiUses(B), the inputs of the upsilons lowered on the block's out-edges whose writes are live
+		// live <- PhiUses(B), the inputs of the upsilons lowered on the block's out-edge whose writes are live
 		LivenessData live{};
 		m_cfg.forEachUpsilon(block, [&](InstId const instId, SSACFG::Inst const& inst) {
 			InstId const v = inst.inputs.at(0);
 			yulAssert(!m_cfg.isUnreachable(v));
-			if (!m_cfg.isLiteral(v) && isLoweredOnEdge(instId) && shadowLiveBehind(instId, m_cfg.upsilonPhi(instId)))
+			if (!m_cfg.isLiteral(v) && isLoweredOnEdge(m_cfg, instId) && shadowLiveBehind(instId, m_cfg.upsilonPhi(instId)))
 				live.insert(v);
 		});
 

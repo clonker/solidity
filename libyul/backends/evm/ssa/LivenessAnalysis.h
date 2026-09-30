@@ -31,11 +31,18 @@
 namespace solidity::yul::ssa
 {
 
+/// Whether the upsilon `_upsilon` is lowered on the out-edge of its block instead of at its position: its block ends in
+/// a jump, and neither an operation nor its phi follows it in the block. Nothing then observes the write before the
+/// edge, and the edge realizes it if the shadow is live on entry of the jump target. A conditional jump could not
+/// carry the write on its nonZero edge, since JUMPI jumps there directly; critical-edge splitting moves the upsilons
+/// for the phis of a join into blocks of their own.
+bool isLoweredOnEdge(SSACFG const& _cfg, InstId _upsilon);
+
 /// Performs liveness analysis on a reducible SSA CFG following Algorithm 9.1 in [1].
 ///
 /// In Pizlo form, a phi has no inputs and is defined at its position, like any other Inst, so the algorithm needs
 /// no PhiDefs. An upsilon reads its input only if what it writes into the shadow of its phi is live: at the end of
-/// its block if it is lowered on the block's out-edges (see `isLoweredOnEdge`), at its position otherwise.
+/// its block if it is lowered on the block's out-edge (see `isLoweredOnEdge`), at its position otherwise.
 ///
 /// The shadows of Pizlo form are not SSA values: several upsilons write a shadow and each of them may execute any
 /// number of times. But a shadow has a single reader, its phi, so its liveness follows by path exploration [1, Chapter 9]:
@@ -64,11 +71,6 @@ public:
 	/// Whether the shadow of `_phi` is live right behind the Inst `_id`: the next access to it in the block is the
 	/// read of the phi, or there is none and the shadow is live on exit
 	bool shadowLiveBehind(InstId _id, InstId _phi) const;
-	/// Whether the upsilon `_upsilon` is lowered on the out-edges of its block instead of at its position: neither an
-	/// operation nor its phi follows it in the block, and its shadow is not live on entry of the nonZero target of a
-	/// conditional exit (JUMPI jumps there directly, so that edge cannot carry code). The edges into successors on
-	/// whose entry the shadow is live then realize the write.
-	bool isLoweredOnEdge(InstId _upsilon) const;
 	traversal::ForwardTopologicalSort const& topologicalSort() const { return m_topologicalSort; }
 	SSACFG const& cfg() const { return m_cfg; }
 
