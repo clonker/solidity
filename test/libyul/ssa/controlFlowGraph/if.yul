@@ -37,8 +37,8 @@
 // Block0_3Exit [label="Jump" shape=oval];
 // Block0_3Exit -> Block0_2 [style="solid"];
 // Block0_2 [label="\
-// Block 2; (2, max 2)\nLiveIn: phi6[2]\l\
-// LiveOut: \l\nUsed: phi6[2]\l\nphi6 := φ(\l\
+// Block 2; (2, max 2)\nLiveIn: \l\
+// LiveOut: \l\nUsed: \l\nphi6 := φ(\l\
 // 	Block 1 => v5,\l\
 // 	Block 3 => v1\l\
 // )\l\

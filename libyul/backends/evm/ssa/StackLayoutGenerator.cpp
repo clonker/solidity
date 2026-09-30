@@ -131,8 +131,7 @@ void declareJunk(Stack& _stack, LivenessAnalysis const& _liveness, SSACFG::Block
 }
 
 /// The phis that do not interfere with their shadows: no upsilon writes the shadow while the phi is live, so that a
-/// phi and its shadow slot can share a spill key. A phi is dead on entry of its block, since its position there
-/// dominates its uses (liveness counts it from the block entry, which is only an over-approximation).
+/// phi and its shadow slot can share a spill key
 std::shared_ptr<std::set<InstId> const> phisSharingShadowKey(LivenessAnalysis const& _liveness)
 {
 	SSACFG const& cfg = _liveness.cfg();
@@ -149,11 +148,7 @@ std::shared_ptr<std::set<InstId> const> phisSharingShadowKey(LivenessAnalysis co
 				return;
 			if (_liveness.isLoweredOnEdge(_upsilon))
 				block.forEachExit([&](SSACFG::BlockId const _successor) {
-					if (
-						_liveness.shadowLiveIn(_successor, phi) &&
-						_successor != cfg.inst(phi).block &&
-						_liveness.liveIn(_successor).contains(phi)
-					)
+					if (_liveness.shadowLiveIn(_successor, phi) && _liveness.liveIn(_successor).contains(phi))
 						interfering.insert(phi);
 				});
 			else if (_liveness.operationLiveOut(_upsilon).contains(phi))

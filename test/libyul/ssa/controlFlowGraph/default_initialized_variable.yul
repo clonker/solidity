@@ -34,8 +34,8 @@
 // Block0_3Exit [label="Jump" shape=oval];
 // Block0_3Exit -> Block0_2 [style="solid"];
 // Block0_2 [label="\
-// Block 2; (2, max 2)\nLiveIn: phi4[3]\l\
-// LiveOut: \l\nUsed: phi4[3]\l\nphi4 := φ(\l\
+// Block 2; (2, max 2)\nLiveIn: \l\
+// LiveOut: \l\nUsed: \l\nphi4 := φ(\l\
 // 	Block 1 => 0x05,\l\
 // 	Block 3 => 0x00\l\
 // )\l\

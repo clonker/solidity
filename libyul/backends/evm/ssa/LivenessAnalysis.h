@@ -33,9 +33,9 @@ namespace solidity::yul::ssa
 
 /// Performs liveness analysis on a reducible SSA CFG following Algorithm 9.1 in [1].
 ///
-/// Phis count as defined at the entry of their block. An upsilon reads its input only if what it writes into the
-/// shadow of its phi is live: at the end of its block if it is lowered on the block's out-edges (see
-/// `isLoweredOnEdge`), at its position otherwise.
+/// In Pizlo form, a phi has no inputs and is defined at its position, like any other Inst, so the algorithm needs
+/// no PhiDefs. An upsilon reads its input only if what it writes into the shadow of its phi is live: at the end of
+/// its block if it is lowered on the block's out-edges (see `isLoweredOnEdge`), at its position otherwise.
 ///
 /// The shadows of Pizlo form are not SSA values: several upsilons write a shadow and each of them may execute any
 /// number of times. But a shadow has a single reader, its phi, so its liveness follows by path exploration [1, Chapter 9]:
