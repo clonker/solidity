@@ -19,6 +19,7 @@
 #pragma once
 
 #include <libyul/backends/evm/ssa/spill/Emitter.h>
+#include <libyul/backends/evm/ssa/spill/SpillSet.h>
 
 #include <libyul/backends/evm/ssa/ShuffleTrace.h>
 #include <libyul/backends/evm/ssa/Stack.h>
@@ -80,9 +81,8 @@ private:
 	/// Appends the assembly realizing a single recorded shuffle operation. Does not touch the symbolic stack.
 	void emit(ShuffleOp const& _op);
 
-	/// If `_value` is spilled, plays back its recorded def-site trace, which brings it to the stack top and
-	/// stores it into its memory slot
-	void spillStore(InstId _value);
+	/// Plays back the recorded store traces at the site `_site` (see `spill::SpillStoreTraces`)
+	void spillStore(spill::SpillStoreSite _site);
 
 	AbstractAssembly& m_assembly;
 	BuiltinContext& m_builtinContext;

@@ -36,7 +36,8 @@ struct BlockLayout
 	/// Transforms the stack after the last operation into the block's exit state (for conditional jumps: condition on top, pre-JUMPI)
 	ShuffleTrace exitShuffle;
 	/// Per predecessor edge: transforms the predecessor's post-exit stack (for conditional jumps: after
-	/// popping the condition) into the phi preimage of `stackIn` under that edge
+	/// popping the condition) into `stackIn`, concluding with the renames by which the upsilons lowered on the edge
+	/// write their shadow slots
 	std::vector<std::pair<SSACFG::BlockId, ShuffleTrace>> tracesForStackIn;
 
 	/// The recorded shuffle for the edge from `_predecessor` into this block
@@ -47,6 +48,16 @@ struct BlockLayout
 				return trace;
 		yulAssert(false, fmt::format("no recorded shuffle for predecessor edge from block {}", _predecessor));
 		solidity::util::unreachable();
+	}
+
+	/// Whether the trace of an incoming edge writes the shadow slot `_shadow`, by renaming an upsilon input to it
+	bool writesOnEntry(StackSlot const& _shadow) const
+	{
+		for (auto const& [parent, trace]: tracesForStackIn)
+			for (ShuffleOp const& op: trace)
+				if (op.kind == ShuffleOp::Kind::Rename && op.slot == _shadow)
+					return true;
+		return false;
 	}
 
 	/// Records the shuffle for the edge from `_predecessor` into this block

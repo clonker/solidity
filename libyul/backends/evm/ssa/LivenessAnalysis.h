@@ -33,6 +33,9 @@ namespace solidity::yul::ssa
 
 /// Performs liveness analysis on a reducible SSA CFG following Algorithm 9.1 in [1].
 ///
+/// In Pizlo form, a phi has no inputs and is defined at its position, like any other Inst, so the algorithm needs
+/// no PhiDefs.
+///
 /// The upsilons of a block take effect on its out-edge: a block with upsilons ends in a jump (see
 /// `CriticalEdgeBreaker`), and nothing between an upsilon and the edge observes the shadow it writes, since the phi
 /// is the shadow's only reader and never follows an upsilon for it in the same block (see `TrivialPhiEliminator`).

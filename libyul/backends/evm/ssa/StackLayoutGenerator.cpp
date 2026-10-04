@@ -22,61 +22,127 @@
 #include <libyul/backends/evm/ssa/stack/Shuffler.h>
 
 #include <libyul/backends/evm/ssa/JunkAdmittingBlocksFinder.h>
-#include <libyul/backends/evm/ssa/PhiInverse.h>
 #include <libyul/backends/evm/ssa/ShuffleTrace.h>
 #include <libyul/backends/evm/ssa/StackUtils.h>
 
 #include <libsolutil/Visitor.h>
 
+#include <range/v3/algorithm/contains.hpp>
 #include <range/v3/algorithm/count.hpp>
 #include <range/v3/algorithm/replace.hpp>
 #include <range/v3/view/transform.hpp>
 #include <range/v3/to_container.hpp>
 
+#include <memory>
 #include <queue>
+#include <set>
 
 using namespace solidity::yul::ssa;
 
 namespace
 {
-void handlePhiFunctions(StackData& _stackData, PhiInverse const& _phiInverse, LivenessAnalysis::LivenessData const& _liveness, SSACFG const& _cfg)
+/// Shuffles `_exitStack` across an edge into a block with stack-in `_stackIn`: towards `_stackIn` with the shadow slots
+/// written on the edge (`_writes`, the live writes of the edge's source block) replaced by the inputs of their
+/// upsilons, then renaming those inputs to the shadow slots
+stack::ShuffleResult shuffleAcrossEdge(
+	SSACFG const& _cfg,
+	StackData _exitStack,
+	StackData const& _stackIn,
+	ShadowLiveness::Writes const& _writes,
+	spill::SpillSet& _spillSet,
+	bool const _spillingAllowed
+)
 {
-	// add any phi function values here that are not already contained in the stack
-	for (auto const& [phi, preImage]: _phiInverse.data())
+	auto const isWritten = [&](StackSlot const& _slot) { return _slot.isShadow() && _writes.contains(_slot.shadowPhi()); };
+	StackData target = _stackIn;
+	for (auto& slot: target)
+		if (isWritten(slot))
+			slot = StackSlot::makeValue(_cfg, _writes.at(slot.shadowPhi()));
+	stack::ShuffleResult result = stack::shuffle(_exitStack, target, _spillSet, _spillingAllowed);
+	if (result.status != stack::ShuffleResult::Status::Admissible)
+		return result;
+	Stack stack(_exitStack, &result.trace);
+	for (StackOffset offset{0}; offset < _stackIn.size(); ++offset.value)
+		if (isWritten(_stackIn[offset.value]))
+			stack.rename(stack.offsetToDepth(offset), _stackIn[offset.value]);
+	return result;
+}
+
+/// Turns a predecessor's exit stack into a candidate stack-in: an input written into a shadow on the edge becomes the
+/// shadow slot in place if nothing else needs it on entry, and is copied otherwise
+void applyEdgeWrites(StackData& _stackData, ShadowLiveness::Writes const& _writes, LivenessAnalysis::LivenessData const& _liveness, SSACFG const& _cfg)
+{
+	// add the shadow slots written on the edge that are not already contained in the stack
+	for (auto const& [phi, input]: _writes)
 	{
+		auto const shadowSlot = StackSlot::makeShadow(_cfg, phi);
 		auto reversedStackData = _stackData | ranges::views::reverse;
-		auto const phiSlot = StackSlot::makeValue(_cfg, phi);
-		auto const preImageSlot = StackSlot::makeValue(_cfg, preImage);
-		auto it = ranges::find(reversedStackData, preImageSlot);
-		if (_liveness.contains(preImage))
+		auto const inputSlot = StackSlot::makeValue(_cfg, input);
+		auto it = ranges::find(reversedStackData, inputSlot);
+		if (_liveness.contains(input))
 		{
-			// Both the phi function and the preimage are part of the live-in set.
-			// If the preimage occurs more than once on the stack, one occurrence is
-			// symbolically replaced by the phi function; otherwise, we push the phi value.
-			if (ranges::count(_stackData, preImageSlot) > 1)
-				*it = phiSlot;
+			// The input is part of the live-in set as well.
+			// If the input occurs more than once on the stack, one occurrence is
+			// symbolically replaced by the shadow slot; otherwise, we push the shadow slot.
+			if (ranges::count(_stackData, inputSlot) > 1)
+				*it = shadowSlot;
 			else
-				_stackData.emplace_back(phiSlot);
+				_stackData.emplace_back(shadowSlot);
 		}
 		else
 		{
-			// replace all occurrences of the preimage with the phi value
-			ranges::replace(_stackData, preImageSlot, phiSlot);
+			// replace all occurrences of the input with the shadow slot
+			ranges::replace(_stackData, inputSlot, shadowSlot);
 			// if it's not contained, push it (could be derived from a literal)
 			if (it == ranges::end(reversedStackData))
-				_stackData.emplace_back(phiSlot);
+				_stackData.emplace_back(shadowSlot);
 		}
 	}
 }
 
-void declareJunk(Stack& _stack, LivenessAnalysis::LivenessData const& _live)
+void declareJunk(Stack& _stack, LivenessAnalysis const& _liveness, SSACFG::BlockId const _block)
 {
+	auto const& liveIn = _liveness.liveIn(_block);
 	for (StackOffset offset{0}; offset < _stack.size(); ++offset.value)
 	{
 		auto const& slot = _stack[offset];
-		if (slot.isValue() && !_live.contains(slot.value()))
+		if (
+			(slot.isValue() && !liveIn.contains(slot.value())) ||
+			(slot.isShadow() && !_liveness.shadows().liveIn(_block, slot.shadowPhi()))
+		)
 			_stack.declareJunk(offset);
 	}
+}
+
+/// The phis that do not interfere with their shadows: no upsilon writes the shadow while the phi is live, so that a
+/// phi and its shadow slot can share a spill key. A write lands on entry of the successor of its block, so the phi
+/// interferes if it is live there.
+std::shared_ptr<std::set<InstId> const> phisSharingShadowKey(LivenessAnalysis const& _liveness)
+{
+	SSACFG const& cfg = _liveness.cfg();
+	std::set<InstId> phis;
+	std::set<InstId> interfering;
+	for (SSACFG::BlockId const blockId: _liveness.dfsTree().preOrder())
+	{
+		auto const& block = cfg.block(blockId);
+		cfg.forEachPhi(block, [&](InstId const _phi, SSACFG::Inst const&) { phis.insert(_phi); });
+		for (auto const& [phi, input]: _liveness.shadows().liveWrites(blockId))
+			block.forEachExit([&](SSACFG::BlockId const _successor) {
+				if (_liveness.liveIn(_successor).contains(phi))
+					interfering.insert(phi);
+			});
+	}
+	for (InstId const phi: interfering)
+		phis.erase(phi);
+	return std::make_shared<std::set<InstId> const>(std::move(phis));
+}
+
+/// Renames every copy of `_from` on `_stack` to `_to`
+void renameAll(Stack& _stack, StackSlot const& _from, StackSlot const& _to)
+{
+	for (StackOffset offset{0}; offset < _stack.size(); ++offset.value)
+		if (_stack[offset] == _from)
+			_stack.rename(_stack.offsetToDepth(offset), _to);
 }
 
 }
@@ -88,7 +154,7 @@ StackLayoutGenerator::Result StackLayoutGenerator::generate(
 	bool const _spillingAllowed
 )
 {
-	spill::SpillSet spillSet;
+	spill::SpillSet spillSet(phisSharingShadowKey(_liveness));
 	spill::SpillStoreTraces spillStoreTraces;
 	while (true)
 	{
@@ -188,22 +254,35 @@ void StackLayoutGenerator::defineStackIn(SSACFG::BlockId const& _blockId)
 		// pass through
 		yulAssert(stackInProposals.size() == 1);
 		blockLayout.stackIn = stackInProposals[0].second;
-		handlePhiFunctions(blockLayout.stackIn, PhiInverse(m_cfg, stackInProposals[0].first, _blockId), liveIn, m_cfg);
+		applyEdgeWrites(blockLayout.stackIn, m_liveness.shadows().liveWrites(stackInProposals[0].first), liveIn, m_cfg);
 		Stack stack(blockLayout.stackIn);
-		declareJunk(stack, liveIn);
+		declareJunk(stack, m_liveness, _blockId);
 	}
 	else
 	{
-		// Pre-compute each parent's proposal
+		// The shadow slots written on an incoming edge, back edges included: every candidate stack-in carries them,
+		// even if the predecessor it comes from dropped a spilled copy
+		std::vector<StackSlot> edgeWrittenShadows;
+		for (SSACFG::BlockId const entry: block.entries)
+			for (auto const& [phi, input]: m_liveness.shadows().liveWrites(entry))
+				if (auto const shadowSlot = Slot::makeShadow(m_cfg, phi); !ranges::contains(edgeWrittenShadows, shadowSlot))
+					edgeWrittenShadows.push_back(shadowSlot);
+
+		// Pre-compute each parent's proposal and the writes on its edge
 		std::vector<StackData> proposals(stackInProposals.size());
+		std::vector<ShadowLiveness::Writes> edgeWrites(stackInProposals.size());
 		for (std::size_t i = 0; i < stackInProposals.size(); ++i)
 		{
 			proposals[i] = stackInProposals[i].second;
-			handlePhiFunctions(proposals[i], PhiInverse(m_cfg, stackInProposals[i].first, _blockId), liveIn, m_cfg);
+			edgeWrites[i] = m_liveness.shadows().liveWrites(stackInProposals[i].first);
+			applyEdgeWrites(proposals[i], edgeWrites[i], liveIn, m_cfg);
 			{
 				Stack stack(proposals[i]);
-				declareJunk(stack, liveIn);
+				declareJunk(stack, m_liveness, _blockId);
 			}
+			for (StackSlot const& shadowSlot: edgeWrittenShadows)
+				if (!ranges::contains(proposals[i], shadowSlot))
+					proposals[i].push_back(shadowSlot);
 		}
 		// For each candidate stack-in layout (one parent's proposal), reconcile every parent to it,
 		// discovering the spills needed to make each reconciliation realizable
@@ -214,10 +293,11 @@ void StackLayoutGenerator::defineStackIn(SSACFG::BlockId const& _blockId)
 			spill::SpillSet candidateSpillSet = m_spillSet;
 			for (std::size_t j = 0; j < stackInProposals.size(); ++j)
 			{
-				StackData edgeStack = stackInProposals[j].second;
-				stack::ShuffleResult const result = stack::shuffle(
-					edgeStack,
-					stackPreImage(m_cfg, proposals[i], PhiInverse(m_cfg, stackInProposals[j].first, _blockId)),
+				stack::ShuffleResult const result = shuffleAcrossEdge(
+					m_cfg,
+					stackInProposals[j].second,
+					proposals[i],
+					edgeWrites[j],
 					candidateSpillSet,
 					m_spillingAllowed
 				);
@@ -245,10 +325,11 @@ void StackLayoutGenerator::defineStackIn(SSACFG::BlockId const& _blockId)
 	// Validate every incoming forward edge
 	for (auto const& [parentBlockId, parentExitStack]: stackInProposals)
 	{
-		StackData edgeStack = parentExitStack;
-		auto shuffleResult = stack::shuffle(
-			edgeStack,
-			stackPreImage(m_cfg, blockLayout.stackIn, PhiInverse(m_cfg, parentBlockId, _blockId)),
+		auto shuffleResult = shuffleAcrossEdge(
+			m_cfg,
+			parentExitStack,
+			blockLayout.stackIn,
+			m_liveness.shadows().liveWrites(parentBlockId),
 			m_spillSet,
 			m_spillingAllowed
 		);
@@ -311,12 +392,30 @@ void StackLayoutGenerator::visitBlock(SSACFG::BlockId const& _blockId)
 		});
 	};
 
+	// A phi takes its value out of its shadow slot in place. If the shadow slot was spilled and dropped, a phi sharing
+	// its key lives on in the memory slot, any other phi reloads the shadow slot.
+	auto const layoutPhi = [&](InstId const _instId) {
+		ShuffleTrace trace;
+		Stack tracedStack(currentStackData, &trace);
+		auto const shadowSlot = Slot::makeShadow(m_cfg, _instId);
+		if (!tracedStack.findSlotDepth(shadowSlot))
+		{
+			yulAssert(m_spillSet.isSpilled(shadowSlot), fmt::format("the shadow slot of phi {} is not on the stack", _instId));
+			if (!m_spillSet.sharesKeyWithShadow(_instId))
+				tracedStack.push(shadowSlot);
+		}
+		renameAll(tracedStack, shadowSlot, Slot::makeValue(m_cfg, _instId));
+		blockLayout.operationShuffles.push_back(std::move(trace));
+	};
+
 	blockLayout.operationShuffles.reserve(block.instructions.size());
 	for (InstId const instId: block.instructions)
 	{
 		SSACFG::Inst const& inst = m_cfg.inst(instId);
 		if (inst.isOperation())
 			layoutOperation(instId, inst);
+		else if (inst.isPhi())
+			layoutPhi(instId);
 		else
 			blockLayout.operationShuffles.emplace_back();
 	}
@@ -326,9 +425,14 @@ void StackLayoutGenerator::visitBlock(SSACFG::BlockId const& _blockId)
 		if (!m_liveness.dfsTree().backEdge(_blockId, _target))
 			return;
 		yulAssert(m_resultLayout[_target], "Back-edge target must have its stackIn defined already.");
-		StackData const target = stackPreImage(m_cfg, m_resultLayout[_target]->stackIn, PhiInverse(m_cfg, _blockId, _target));
-		StackData exitStack = currentStackData;
-		auto shuffleResult = stack::shuffle(exitStack, target, m_spillSet, m_spillingAllowed);
+		auto shuffleResult = shuffleAcrossEdge(
+			m_cfg,
+			currentStackData,
+			m_resultLayout[_target]->stackIn,
+			m_liveness.shadows().liveWrites(_blockId),
+			m_spillSet,
+			m_spillingAllowed
+		);
 		yulAssert(
 			shuffleResult.status == stack::ShuffleResult::Status::Admissible,
 			"Stack too deep, but spilling is disabled because the function is part of a recursive call chain."

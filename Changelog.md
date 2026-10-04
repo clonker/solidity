@@ -10,6 +10,7 @@ Compiler Features:
 * Yul Optimizer: Improve performance of `DataFlowAnalyzer` using flat hash containers.
 
 Bugfixes:
+* General: Fix internal compiler error in the experimental SSA CFG codegen when a phi that follows operations in its block has to be spilled.
 * Parser: Fix inverted version pragma range comparison for components in the range [2**31, 2**32).
 
 Build System:
