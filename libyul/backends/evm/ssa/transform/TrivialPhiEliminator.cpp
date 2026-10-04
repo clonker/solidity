@@ -20,6 +20,8 @@
 
 #include <libyul/backends/evm/ssa/SSACFG.h>
 
+#include <libyul/Exceptions.h>
+
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -27,6 +29,31 @@
 using namespace solidity;
 using namespace solidity::yul;
 using namespace solidity::yul::ssa;
+
+namespace
+{
+
+/// The value `_phi` reads if an upsilon for it precedes it in its own block: that upsilon writes the shadow on every
+/// entry of the block, so the phi always reads its input, the last such upsilon's if there are several. Unset
+/// otherwise.
+InstId valueWrittenAheadOf(SSACFG const& _cfg, InstId const _phi)
+{
+	InstId value;
+	for (InstId const id: _cfg.block(_cfg.inst(_phi).block).instructions)
+	{
+		if (id == _phi)
+			return value;
+		if (!_cfg.isUpsilon(id) || _cfg.upsilonPhi(id) != _phi)
+			continue;
+		InstId const input = _cfg.resolveIdentity(_cfg.inst(id).inputs[0]);
+		if (input != _phi && !_cfg.isUnreachable(input))
+			value = input;
+	}
+	yulAssert(false, "phi is not scheduled in its block");
+	solidity::util::unreachable();
+}
+
+}
 
 void transform::eliminateTrivialPhis(SSACFG& _cfg)
 {
@@ -69,10 +96,10 @@ void transform::eliminateTrivialPhis(SSACFG& _cfg)
 		if (_cfg.kindOf(phi) != InstOpcode::Phi)
 			continue;
 
-		InstId same;
+		InstId same = valueWrittenAheadOf(_cfg, phi);
 		bool nontrivial = false;
 		auto const it = upsilonsTargeting.find(phi);
-		if (it != upsilonsTargeting.end())
+		if (!same.hasValue() && it != upsilonsTargeting.end())
 			for (InstId const ups: it->second)
 			{
 				if (_cfg.kindOf(ups) == InstOpcode::Nop)
