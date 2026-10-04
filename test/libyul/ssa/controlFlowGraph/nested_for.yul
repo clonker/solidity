@@ -32,8 +32,8 @@
 // Block0_0Exit [label="Jump" shape=oval];
 // Block0_0Exit -> Block0_1 [style="solid"];
 // Block0_1 [label="\
-// Block 1; (1, max 19)\nLiveIn: phi2[3], ^phi2[1]\l\
-// LiveOut: phi2[1]\l\nUsed: phi2[2], ^phi2[1]\l\nphi2 := φ(\l\
+// Block 1; (1, max 19)\nLiveIn: ^phi2[1]\l\
+// LiveOut: phi2[1]\l\nUsed: ^phi2[1]\l\nphi2 := φ(\l\
 // 	Block 0 => 0x00,\l\
 // 	Block 8 => v78\l\
 // )\l\
@@ -55,8 +55,8 @@
 // Block0_4Exit [label="MainExit"];
 // Block0_4 -> Block0_4Exit;
 // Block0_5 [label="\
-// Block 5; (3, max 18)\nLiveIn: phi2[1], phi4[3], ^phi4[1]\l\
-// LiveOut: phi2[1], phi4[1]\l\nUsed: phi4[2], ^phi4[1]\l\nphi4 := φ(\l\
+// Block 5; (3, max 18)\nLiveIn: phi2[1], ^phi4[1]\l\
+// LiveOut: phi2[1], phi4[1]\l\nUsed: ^phi4[1]\l\nphi4 := φ(\l\
 // 	Block 2 => 0x00,\l\
 // 	Block 12 => v73\l\
 // )\l\
@@ -80,8 +80,8 @@
 // Block0_8Exit [label="Jump" shape=oval];
 // Block0_8Exit -> Block0_1 [style="dashed"];
 // Block0_9 [label="\
-// Block 9; (5, max 17)\nLiveIn: phi6[3], phi2[1], phi4[1], ^phi6[1]\l\
-// LiveOut: phi6[1], phi2[1], phi4[1]\l\nUsed: phi6[2], ^phi6[1]\l\nphi6 := φ(\l\
+// Block 9; (5, max 17)\nLiveIn: phi2[1], phi4[1], ^phi6[1]\l\
+// LiveOut: phi6[1], phi2[1], phi4[1]\l\nUsed: ^phi6[1]\l\nphi6 := φ(\l\
 // 	Block 6 => 0x00,\l\
 // 	Block 20 => v59\l\
 // )\l\
@@ -121,8 +121,8 @@
 // Block0_14Exit:0 -> Block0_20 [style="solid"];
 // Block0_14Exit:1 -> Block0_19 [style="solid"];
 // Block0_15 [label="\
-// Block 15; (8, max 16)\nLiveIn: phi9[4], phi6[1], phi2[1], phi4[1], ^phi9[1]\l\
-// LiveOut: phi9[2], phi6[1], phi2[1], phi4[1]\l\nUsed: phi9[2], ^phi9[1]\l\nphi9 := φ(\l\
+// Block 15; (8, max 16)\nLiveIn: phi6[1], phi2[1], phi4[1], ^phi9[1]\l\
+// LiveOut: phi9[2], phi6[1], phi2[1], phi4[1]\l\nUsed: ^phi9[1]\l\nphi9 := φ(\l\
 // 	Block 13 => 0x00,\l\
 // 	Block 16 => v18\l\
 // )\l\
@@ -162,8 +162,8 @@
 // Block0_18Exit [label="Jump" shape=oval];
 // Block0_18Exit -> Block0_14 [style="solid"];
 // Block0_21 [label="\
-// Block 21; (13, max 16)\nLiveIn: phi30[4], phi6[1], phi2[1], phi4[1], ^phi30[1]\l\
-// LiveOut: phi30[2], phi6[1], phi2[1], phi4[1]\l\nUsed: phi30[2], ^phi30[1]\l\nphi30 := φ(\l\
+// Block 21; (13, max 16)\nLiveIn: phi6[1], phi2[1], phi4[1], ^phi30[1]\l\
+// LiveOut: phi30[2], phi6[1], phi2[1], phi4[1]\l\nUsed: ^phi30[1]\l\nphi30 := φ(\l\
 // 	Block 19 => 0x00,\l\
 // 	Block 22 => v38\l\
 // )\l\
