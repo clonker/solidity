@@ -21,6 +21,7 @@
 #include <libyul/backends/evm/ssa/analysis/DepthFirstSpanningTree.h>
 #include <libyul/backends/evm/ssa/SSACFG.h>
 #include <libyul/backends/evm/ssa/SSACFGLoopNestingForest.h>
+#include <libyul/backends/evm/ssa/ShadowLiveness.h>
 #include <libyul/backends/evm/ssa/util/UseCountSet.h>
 
 #include <boost/container/flat_map.hpp>
@@ -31,6 +32,12 @@ namespace solidity::yul::ssa
 {
 
 /// Performs liveness analysis on a reducible SSA CFG following Algorithm 9.1 in [1].
+///
+/// The upsilons of a block take effect on its out-edge: a block with upsilons ends in a jump (see
+/// `CriticalEdgeBreaker`), and nothing between an upsilon and the edge observes the shadow it writes, since the phi
+/// is the shadow's only reader and never follows an upsilon for it in the same block (see `TrivialPhiEliminator`).
+/// An upsilon's input is thus read at the end of the block, and only if its write is live: it is the block's last
+/// upsilon for its phi and the shadow is live on exit (`ShadowLiveness`).
 ///
 /// [1] Rastello, Fabrice, and Florent Bouchez Tichadou, eds. SSA-based Compiler Design. Springer, 2022.
 class LivenessAnalysis
@@ -46,6 +53,10 @@ public:
 	LivenessData const& liveOut(SSACFG::BlockId const _blockId) const { return m_liveOuts[_blockId.value]; }
 	LivenessData used(SSACFG::BlockId _blockId) const;
 	LivenessData const& operationLiveOut(InstId const _id) const { return m_operationLiveOutByInst.at(_id.value); }
+
+	/// The liveness of the shadows, and the writes to them that reach a phi
+	ShadowLiveness const& shadows() const { return m_shadows; }
+
 	analysis::DepthFirstSpanningTree const& dfsTree() const { return m_dfsTree; }
 	SSACFG const& cfg() const { return m_cfg; }
 
@@ -63,6 +74,7 @@ private:
 	SSACFG const& m_cfg;
 	analysis::DepthFirstSpanningTree m_dfsTree;
 	SSACFGLoopNestingForest m_loopNestingForest;
+	ShadowLiveness m_shadows;
 	std::vector<LivenessData> m_liveIns;
 	std::vector<LivenessData> m_liveOuts;
 	boost::container::flat_map<InstId::ValueType, LivenessData> m_operationLiveOutByInst;

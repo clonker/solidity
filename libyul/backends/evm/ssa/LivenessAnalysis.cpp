@@ -55,6 +55,7 @@ LivenessAnalysis::LivenessAnalysis(SSACFG const& _cfg):
 	m_cfg(_cfg),
 	m_dfsTree(_cfg),
 	m_loopNestingForest(m_dfsTree),
+	m_shadows(_cfg),
 	m_liveIns(_cfg.numBlocks()),
 	m_liveOuts(_cfg.numBlocks())
 {
@@ -81,14 +82,17 @@ void LivenessAnalysis::runDagDfs()
 		// post-order traversal
 		auto const& block = m_cfg.block(blockId);
 
-		// live <- PhiUses(B)
+		// live <- PhiUses(B), the inputs of the writes on the block's out-edge that reach a phi
 		LivenessData live{};
-		m_cfg.forEachUpsilon(block, [&](InstId, SSACFG::Inst const& inst) {
-			InstId const v = inst.inputs.at(0);
+		m_cfg.forEachUpsilon(block, [&](InstId const instId, SSACFG::Inst const&) {
+			yulAssert(block.isJumpBlock(), fmt::format("upsilon {} in a block that does not end in a jump", instId));
+		});
+		for (auto const& [phi, v]: m_shadows.liveWrites(blockId))
+		{
 			yulAssert(!m_cfg.isUnreachable(v));
 			if (!m_cfg.isLiteral(v))
 				live.insert(v);
-		});
+		}
 
 		// for each S \in succs(B) s.t. (B, S) not a back edge: live <- live \cup (LiveIn(S) - PhiDefs(S))
 		block.forEachExit(
