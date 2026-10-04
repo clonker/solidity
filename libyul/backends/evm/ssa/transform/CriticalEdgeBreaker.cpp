@@ -18,16 +18,16 @@
 
 #include <libyul/backends/evm/ssa/transform/CriticalEdgeBreaker.h>
 
+#include <libyul/backends/evm/ssa/ShadowLiveness.h>
 #include <libyul/backends/evm/ssa/SSACFG.h>
 
 #include <libyul/Exceptions.h>
 
-#include <range/v3/algorithm/any_of.hpp>
-#include <range/v3/algorithm/copy_if.hpp>
 #include <range/v3/algorithm/find.hpp>
 #include <range/v3/range/conversion.hpp>
+#include <range/v3/view/filter.hpp>
 
-#include <iterator>
+#include <array>
 #include <variant>
 #include <vector>
 
@@ -38,39 +38,20 @@ using namespace solidity::yul::ssa;
 namespace
 {
 
-/// yields whether the target has several predecessors and carries phis
-bool isCriticalPhiTarget(SSACFG const& _cfg, BlockId const _target)
-{
-	auto const& target = _cfg.block(_target);
-	return
-		target.entries.size() > 1 &&
-		ranges::any_of(target.instructions, [&](InstId const _id) { return _cfg.isPhi(_id); });
-}
-
-/// Inserts a block on the edge from `_predecessor` to `_successor`, moves the predecessor's upsilons of the
-/// successor's phis into it and redirects the predecessor's exit and the successor's entry to it
-void splitEdge(SSACFG& _cfg, BlockId const _predecessor, BlockId const _successor)
+/// Inserts a block on the edge from `_predecessor` to `_successor` and redirects the predecessor's exit and the
+/// successor's entry to it
+BlockId splitEdge(SSACFG& _cfg, BlockId const _predecessor, BlockId const _successor)
 {
 	langutil::DebugData::ConstPtr const debugData = _cfg.debugInfo ? _cfg.debugInfo->exitDebugData(_predecessor) : nullptr;
 	BlockId const edgeBlockId = _cfg.makeBlock(debugData);
 	if (_cfg.debugInfo)
 		_cfg.debugInfo->setExitDebugData(edgeBlockId, debugData);
-
 	auto& edgeBlock = _cfg.block(edgeBlockId);
 	auto& predecessor = _cfg.block(_predecessor);
 	auto& successor = _cfg.block(_successor);
 
 	edgeBlock.entries = {_predecessor};
 	edgeBlock.exit = SSACFG::BasicBlock::Jump{_successor};
-
-	// The upsilons of the successor's phis execute on the edge only
-	auto const feedsSuccessor = [&](InstId const _id) {
-		return _cfg.isUpsilon(_id) && _cfg.inst(_cfg.upsilonPhi(_id)).block == _successor;
-	};
-	ranges::copy_if(predecessor.instructions, std::back_inserter(edgeBlock.instructions), feedsSuccessor);
-	std::erase_if(predecessor.instructions, feedsSuccessor);
-	for (InstId const id: edgeBlock.instructions)
-		_cfg.inst(id).block = edgeBlockId;
 
 	auto& conditionalJump = std::get<SSACFG::BasicBlock::ConditionalJump>(predecessor.exit);
 	yulAssert(conditionalJump.zero != conditionalJump.nonZero);
@@ -79,12 +60,15 @@ void splitEdge(SSACFG& _cfg, BlockId const _predecessor, BlockId const _successo
 	auto const entry = ranges::find(successor.entries, _predecessor);
 	yulAssert(entry != successor.entries.end(), "edge target does not list the predecessor as entry");
 	*entry = edgeBlockId;
+	return edgeBlockId;
 }
 
 }
 
 void transform::breakCriticalEdges(SSACFG& _cfg)
 {
+	ShadowLiveness const shadows(_cfg);
+	auto const isUpsilon = [&](InstId const _id) { return _cfg.isUpsilon(_id); };
 	// we might add new blocks, so we work on a copy of the blocks
 	std::vector<BlockId> const blocks = _cfg.liveBlocks() | ranges::to<std::vector>;
 	for (BlockId const blockId: blocks)
@@ -92,17 +76,34 @@ void transform::breakCriticalEdges(SSACFG& _cfg)
 		auto const* conditionalJump = std::get_if<SSACFG::BasicBlock::ConditionalJump>(&_cfg.block(blockId).exit);
 		if (!conditionalJump)
 			continue;
-
-		// splitting in this case would move all of the block's upsilons into the first edge block and leave the second without
-		if (conditionalJump->zero == conditionalJump->nonZero)
+		std::vector<InstId> const upsilons = _cfg.block(blockId).instructions | ranges::views::filter(isUpsilon) | ranges::to<std::vector>;
+		if (upsilons.empty())
 			continue;
-
-		BlockId const zero = conditionalJump->zero;
-		BlockId const nonZero = conditionalJump->nonZero;
-
-		if (zero != blockId && isCriticalPhiTarget(_cfg, zero))
-			splitEdge(_cfg, blockId, zero);
-		if (nonZero != blockId && isCriticalPhiTarget(_cfg, nonZero))
-			splitEdge(_cfg, blockId, nonZero);
+		yulAssert(conditionalJump->zero != conditionalJump->nonZero, "upsilons in a block with a conditional jump to a single target");
+		// splitting replaces the targets, so they are taken out first
+		std::array<BlockId, 2> const targets{conditionalJump->zero, conditionalJump->nonZero};
+		std::erase_if(_cfg.block(blockId).instructions, isUpsilon);
+		// An upsilon moves onto every out-edge whose target has its shadow live on entry, copied if that is both.
+		for (BlockId const successor: targets)
+		{
+			auto const carried = upsilons | ranges::views::filter([&](InstId const _id) {
+				return shadows.liveIn(successor, _cfg.upsilonPhi(_id));
+			}) | ranges::to<std::vector>;
+			if (carried.empty())
+				continue;
+			BlockId const edgeBlockId = splitEdge(_cfg, blockId, successor);
+			for (InstId const upsilon: carried)
+				if (_cfg.inst(upsilon).block == blockId)
+				{
+					_cfg.inst(upsilon).block = edgeBlockId;
+					_cfg.block(edgeBlockId).instructions.push_back(upsilon);
+				}
+				else
+					_cfg.emitUpsilon(edgeBlockId, _cfg.inst(upsilon).inputs.at(0), _cfg.upsilonPhi(upsilon));
+		}
+		// a write that no phi reads on any path
+		for (InstId const upsilon: upsilons)
+			if (_cfg.inst(upsilon).block == blockId)
+				_cfg.tombstone(upsilon);
 	}
 }

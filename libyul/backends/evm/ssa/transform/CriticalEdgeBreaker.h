@@ -25,12 +25,10 @@ class SSACFG;
 
 namespace transform
 {
-/// Splits every critical edge, i.e., one from a block with several successors into a block with several
-/// predecessors, whose target carries phis. A new block is inserted on the edge and the predecessor's
-/// upsilons for the target's phis move into it.
-///
-/// If an upsilon is left in the predecessor it would produce the pending value on both of its exits, and the path
-/// not leading to the phi would carry the copy as junk.
+/// Moves the upsilons of every block with a conditional exit onto the out-edges whose targets have their shadows
+/// live on entry, so that every upsilon sits in a block ending in a jump and the backend can realize it on the edge.
+/// A JUMPI carries no code on its edges, so a new block is inserted on each such edge. An upsilon whose shadow is
+/// live on entry of both targets is copied, and one that no target reads is dropped.
 ///
 /// For example, with `^p := x` the upsilon of B for the phi `p` of T, which has another predecessor C:
 ///
@@ -40,11 +38,8 @@ namespace transform
 ///                                                          |
 ///                                                          T [p := phi] <- C
 ///
-/// An edge stays unsplit if one of these upsilons is read later in the predecessor itself, i.e., by a phi of a
-/// self loop scheduled after it.
-///
-/// Best run after trivial phi elimination, otherwise this step may introduce edges and blocks for phis that are
-/// about to be removed anyways.
+/// Requires trivial phi elimination to have run: a phi written ahead of itself in its own block would read that
+/// write at its position, not on the edge.
 void breakCriticalEdges(SSACFG& _cfg);
 }
 
