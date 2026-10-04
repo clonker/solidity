@@ -18,7 +18,9 @@
 /**
  * Removes trivial phis from an SSA CFG.
  *
- * A phi is trivial if all its upsilon operands provide the same value (modulo self-references).
+ * A phi is trivial if all its upsilon operands provide the same value (modulo self-references), or if an upsilon
+ * for it precedes it in its own block: that upsilon writes the shadow on every entry of the block, so the phi
+ * always reads its input, whatever the other upsilons wrote.
  * Removal may cascade: eliminating one trivial phi can make others trivial.
  */
 #pragma once
