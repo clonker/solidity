@@ -28,7 +28,7 @@
 
 #include <libsolutil/Visitor.h>
 
-#include <range/v3/algorithm/all_of.hpp>
+#include <range/v3/algorithm/any_of.hpp>
 #include <range/v3/view/take_last.hpp>
 #include <range/v3/view/zip.hpp>
 
@@ -405,8 +405,16 @@ void CodeTransform::operator()(SSACFG::BlockId const& _currentBlock, SSACFG::Bas
 	yulAssert(static_cast<int>(m_stack.size()) == m_assembly.stackHeight());
 	// condition must be at the top of the stack
 	yulAssert(m_stack.top().isValue() && m_stack.top().value() == _conditionalJump.condition);
-	// emit JUMPI to nonZero block
-	m_assembly.appendJumpToIf(m_blockLabels[_conditionalJump.nonZero.value]);
+	// The nonZero edge's trace is played back below, after the jump to the zero block. If it emits code, JUMPI
+	// targets that code under a label of its own, from where the nonZero block is reached
+	yulAssert(m_stackLayout[_conditionalJump.nonZero]);
+	bool const nonZeroEdgeEmitsCode = ranges::any_of(
+		m_stackLayout[_conditionalJump.nonZero]->traceForStackIn(_currentBlock),
+		[](ShuffleOp const& _op) { return _op.kind != ShuffleOp::Kind::Rename; }
+	);
+	AbstractAssembly::LabelID const nonZeroEdgeLabel =
+		nonZeroEdgeEmitsCode ? m_assembly.newLabelId() : m_blockLabels[_conditionalJump.nonZero.value];
+	m_assembly.appendJumpToIf(nonZeroEdgeLabel);
 	// update symbolic stack by popping the condition as it'll be consumed by JUMPI
 	m_stack.pop();
 
@@ -424,21 +432,16 @@ void CodeTransform::operator()(SSACFG::BlockId const& _currentBlock, SSACFG::Bas
 			(*this)(_conditionalJump.zero);
 	}
 	{
-		yulAssert(m_stackLayout[_conditionalJump.nonZero]);
-		// JUMPI enters the nonZero target directly: whatever code its edge carried would be dead
-		yulAssert(
-			ranges::all_of(
-				m_stackLayout[_conditionalJump.nonZero]->traceForStackIn(_currentBlock),
-				[](ShuffleOp const& _op) { return _op.kind == ShuffleOp::Kind::Rename; }
-			),
-			"The edge into the nonZero target of a conditional jump cannot carry code."
-		);
+		if (nonZeroEdgeEmitsCode)
+			m_assembly.appendLabel(nonZeroEdgeLabel);
 		m_assembly.setStackHeight(static_cast<int>(m_stack.size()));
 		// transform stack to a state in which we can jump to the nonZero branch
 		prepareBlockExitStack(_currentBlock, _conditionalJump.nonZero);
 		assertLayoutCompatibility(m_stack.data(), m_stackLayout[_conditionalJump.nonZero]->stackIn);
 		if (!m_blockIsTransformed[_conditionalJump.nonZero.value])
-			(*this)(_conditionalJump.nonZero);
+			(*this)(_conditionalJump.nonZero);  // falls through into the block
+		else if (nonZeroEdgeEmitsCode)
+			m_assembly.appendJumpTo(m_blockLabels[_conditionalJump.nonZero.value]);
 	}
 }
 
