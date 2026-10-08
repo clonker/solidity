@@ -19,6 +19,7 @@
 #include <test/libyul/ssa/ExecutionTest.h>
 
 #include <test/EVMHost.h>
+#include <test/tools/yulInterpreter/SSACFGInterpreter.h>
 
 #include <libyul/backends/evm/ssa/io/Parser.h>
 #include <libyul/backends/evm/ssa/transform/OptimizationPipeline.h>
@@ -48,7 +49,6 @@
 #include <fmt/ranges.h>
 
 #include <map>
-#include <optional>
 
 using namespace solidity;
 using namespace solidity::util;
@@ -57,6 +57,8 @@ using namespace solidity::yul::ssa;
 using namespace solidity::yul::test::ssa;
 using namespace solidity::frontend::test;
 using solidity::test::EVMHost;
+using solidity::yul::test::InterpreterState;
+using solidity::yul::test::SSACFGInterpreter;
 
 namespace
 {
@@ -80,184 +82,27 @@ struct Outcome
 	}
 };
 
-/// Executes SSA CFGs in Pizlo form: an upsilon writes the shadow of its phi at its position, a phi reads its shadow
-/// at its position. Shadows are per function invocation. Supports the builtins the tests use.
-class ReferenceInterpreter
+/// The outcome of interpreting the graphs: an upsilon writes the shadow of its phi when it executes, a phi reads
+/// its shadow when it executes
+Outcome interpret(ControlFlowGraphs const& _cfgs, u256 const& _calldataWord)
 {
-public:
-	ReferenceInterpreter(ControlFlowGraphs const& _cfgs, u256 const& _calldataWord):
-		m_cfgs(_cfgs), m_calldataWord(_calldataWord) {}
+	InterpreterState state;
+	state.calldata = toBigEndian(_calldataWord);
+	state.maxSteps = 1'000'000;
+	auto const [outcome, finalState] = SSACFGInterpreter::run(std::move(state), _cfgs, true);
+	soltestAssert(outcome != SSACFGInterpreter::Outcome::Limit, "the SSA CFG interpreter hit a limit");
 
-	Outcome run()
-	{
-		Outcome outcome;
-		try
-		{
-			call(ControlFlowGraphs::mainGraphID(), {});
-		}
-		catch (Revert const&)
-		{
-			outcome.reverted = true;
-			return outcome;
-		}
-		catch (Stop const&)
-		{
-		}
-		for (auto const& [key, value]: m_storage)
-			if (value != 0)
-				outcome.storage[key] = value;
-		return outcome;
-	}
-
-private:
-	struct Stop {};
-	struct Revert {};
-
-	std::vector<u256> call(FunctionGraphID const _graphID, std::vector<u256> const& _arguments)
-	{
-		SSACFG const& cfg = *m_cfgs.functionGraph(_graphID);
-		std::map<InstId, u256> values;
-		std::map<InstId, std::vector<u256>> tuples;
-		std::map<InstId, u256> shadows;
-		soltestAssert(cfg.arguments.size() == _arguments.size());
-		for (std::size_t i = 0; i < _arguments.size(); ++i)
-			values[cfg.arguments[i]] = _arguments[i];
-
-		auto const value = [&](InstId const _id) -> u256 {
-			if (cfg.isLiteral(_id))
-				return cfg.literalPayload(_id);
-			auto const it = values.find(_id);
-			soltestAssert(it != values.end(), fmt::format("{} is read before it is defined", _id));
-			return it->second;
-		};
-
-		BlockId blockId = cfg.entry;
-		while (true)
-		{
-			soltestAssert(++m_steps < 1'000'000, "step limit exceeded");
-			auto const& block = cfg.block(blockId);
-			for (InstId const id: block.instructions)
-			{
-				auto const& inst = cfg.inst(id);
-				switch (inst.opcode)
-				{
-				case InstOpcode::Phi:
-				{
-					auto const it = shadows.find(id);
-					soltestAssert(it != shadows.end(), fmt::format("phi {} reads its shadow before any upsilon writes it", id));
-					values[id] = it->second;
-					break;
-				}
-				case InstOpcode::Upsilon:
-					shadows[cfg.upsilonPhi(id)] = value(inst.inputs.at(0));
-					break;
-				case InstOpcode::BuiltinCall:
-				{
-					std::vector<u256> arguments;
-					for (InstId const input: inst.inputs)
-						arguments.push_back(value(input));
-					if (std::optional<u256> const result = builtin(cfg, id, arguments))
-						values[id] = *result;
-					break;
-				}
-				case InstOpcode::Call:
-				{
-					std::vector<u256> arguments;
-					for (InstId const input: inst.inputs)
-						arguments.push_back(value(input));
-					std::vector<u256> results = call(cfg.callPayload(id).graphID, arguments);
-					if (results.size() == 1)
-						values[id] = results.front();
-					else
-						tuples[id] = std::move(results);
-					break;
-				}
-				case InstOpcode::Projection:
-					values[id] = tuples.at(inst.inputs.at(0)).at(cfg.projectionIndex(id));
-					break;
-				case InstOpcode::Identity:
-					values[id] = value(inst.inputs.at(0));
-					break;
-				case InstOpcode::MemoryGuard:
-					soltestAssert(m_cfgs.memoryGuard.has_value());
-					values[id] = *m_cfgs.memoryGuard;
-					break;
-				case InstOpcode::Const:
-				case InstOpcode::FunctionArg:
-				case InstOpcode::Nop:
-					break;
-				case InstOpcode::Unreachable:
-				case InstOpcode::Tombstone:
-					soltestAssert(false, fmt::format("{} executed", id));
-				}
-			}
-
-			if (auto const* jump = std::get_if<SSACFG::BasicBlock::Jump>(&block.exit))
-				blockId = jump->target;
-			else if (auto const* conditionalJump = std::get_if<SSACFG::BasicBlock::ConditionalJump>(&block.exit))
-				blockId = value(conditionalJump->condition) != 0 ? conditionalJump->nonZero : conditionalJump->zero;
-			else if (auto const* functionReturn = std::get_if<SSACFG::BasicBlock::FunctionReturn>(&block.exit))
-			{
-				std::vector<u256> results;
-				for (InstId const returnValue: functionReturn->returnValues)
-					results.push_back(value(returnValue));
-				return results;
-			}
-			else if (block.isMainExitBlock())
-				throw Stop{};
-			else
-				soltestAssert(false, fmt::format("block {} terminates without a terminating builtin", blockId));
-		}
-	}
-
-	std::optional<u256> builtin(SSACFG const& _cfg, InstId const _id, std::vector<u256> const& _args)
-	{
-		std::string const& name = _cfg.evmDialect.builtin(_cfg.builtinPayload(_id).builtin).name;
-		auto const arg = [&](std::size_t _index) -> u256 const& { return _args.at(_index); };
-		if (name == "add") return arg(0) + arg(1);
-		if (name == "sub") return arg(0) - arg(1);
-		if (name == "mul") return arg(0) * arg(1);
-		if (name == "div") return arg(1) == 0 ? u256(0) : arg(0) / arg(1);
-		if (name == "mod") return arg(1) == 0 ? u256(0) : arg(0) % arg(1);
-		if (name == "lt") return u256(arg(0) < arg(1));
-		if (name == "gt") return u256(arg(0) > arg(1));
-		if (name == "eq") return u256(arg(0) == arg(1));
-		if (name == "iszero") return u256(arg(0) == 0);
-		if (name == "and") return arg(0) & arg(1);
-		if (name == "or") return arg(0) | arg(1);
-		if (name == "xor") return arg(0) ^ arg(1);
-		if (name == "not") return ~arg(0);
-		if (name == "shl") return arg(0) >= 256 ? u256(0) : u256(arg(1) << static_cast<unsigned>(arg(0)));
-		if (name == "shr") return arg(0) >= 256 ? u256(0) : u256(arg(1) >> static_cast<unsigned>(arg(0)));
-		if (name == "calldataload") return arg(0) == 0 ? m_calldataWord : u256(0);
-		if (name == "calldatasize") return u256(32);
-		if (name == "sload") return m_storage[arg(0)];
-		if (name == "mload") return m_memory[arg(0)];
-		if (name == "sstore")
-		{
-			m_storage[arg(0)] = arg(1);
-			return std::nullopt;
-		}
-		if (name == "mstore")
-		{
-			soltestAssert(arg(0) % 32 == 0, "the reference interpreter only supports word-aligned memory");
-			m_memory[arg(0)] = arg(1);
-			return std::nullopt;
-		}
-		if (name == "stop" || name == "return")
-			throw Stop{};
-		if (name == "revert" || name == "invalid")
-			throw Revert{};
-		soltestAssert(false, fmt::format("builtin {} is not supported by the reference interpreter", name));
-		solidity::util::unreachable();
-	}
-
-	ControlFlowGraphs const& m_cfgs;
-	u256 m_calldataWord;
-	std::map<u256, u256> m_storage;
-	std::map<u256, u256> m_memory;
-	std::size_t m_steps = 0;
-};
+	Outcome result;
+	result.reverted =
+		outcome == SSACFGInterpreter::Outcome::Terminated &&
+		!finalState.trace.empty() &&
+		finalState.trace.back().starts_with("REVERT(");
+	if (!result.reverted)
+		for (auto const& [key, value]: finalState.storage)
+			if (value != h256{})
+				result.storage[u256(key)] = u256(value);
+	return result;
+}
 
 Outcome execute(langutil::EVMVersion const _evmVersion, evmc::VM& _vm, bytes const& _code, u256 const& _calldataWord)
 {
@@ -379,7 +224,7 @@ TestCase::TestResult ExecutionTest::run(std::ostream& _stream, std::string const
 	for (std::string const& word: m_calldata)
 	{
 		u256 const calldataWord(word);
-		Outcome const expected = ReferenceInterpreter(**reference, calldataWord).run();
+		Outcome const expected = interpret(**reference, calldataWord);
 		Outcome const actual = execute(m_evmVersion, *vm, code, calldataWord);
 		m_obtainedResult += fmt::format("calldata {}: {}\n", toCompactHexWithPrefix(calldataWord), expected.str());
 		if (actual != expected)
