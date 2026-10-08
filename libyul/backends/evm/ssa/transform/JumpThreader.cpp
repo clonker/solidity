@@ -41,8 +41,10 @@ bool mergeSuccessorIntoPredecessor(SSACFG& _cfg, BlockId const _predecessor, Blo
 	auto& successorBlock = _cfg.block(_successor);
 
 	yulAssert(successorBlock.entries.size() == 1);
-	// Cannot thread through a block that carries phis
-	yulAssert(!ranges::any_of(successorBlock.instructions, [&](InstId const _id) { return _cfg.isPhi(_id); }));
+	// A phi reads the last write of its shadow, which need not come from the predecessor: a block with a single
+	// entry may carry phis. Merging would schedule them behind the predecessor's upsilons, so we leave them be.
+	if (ranges::any_of(successorBlock.instructions, [&](InstId const _id) { return _cfg.isPhi(_id); }))
+		return false;
 
 	// Re-home the target's instructions into the source (their defining block moves along).
 	for (InstId const id: successorBlock.instructions)

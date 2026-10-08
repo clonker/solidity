@@ -1,0 +1,76 @@
+#0:
+    v0 = const 0x00
+    v3 = builtin @calldataload v0
+    v4 = call @r v3
+    builtin @sstore v0, v4
+    main_exit
+
+func @r(args: (v0)) -> 1 {
+#0:
+    v0 = arg 0
+    v1 = const 0x01
+    v2 = const 0x02
+    upsilon v0 -> ^v20
+    branch v0, #1, #3
+#1: preds: #0
+    v10 = builtin @sub v0, v1
+    v11 = call @r v10
+    upsilon v11 -> ^v20
+    v12 = builtin @and v0, v1
+    branch v12, #2, #3
+#2: preds: #1
+    v13 = builtin @mul v11, v2
+    upsilon v13 -> ^v20
+    jump #3
+#3: preds: #0, #1, #2
+    builtin @sstore v0, v0
+    jump #4
+#4: preds: #3
+    v20 = phi
+    v21 = builtin @add v20, v0
+    return v21
+}
+// ====
+// calldata: 0 1 2 5
+// ----
+// #0:
+//     v0 = const 0x00
+//     v1 = builtin @calldataload v0
+//     v2 = call @r v1
+//     builtin @sstore v0, v2
+//     main_exit
+//
+// func @r(args: (v0)) -> 1 {
+// #0:
+//     v0 = arg 0
+//     v1 = const 0x01
+//     v2 = const 0x02
+//     branch v0, #1, #5
+// #1: preds: #0
+//     v4 = builtin @sub v0, v1
+//     v5 = call @r v4
+//     v7 = builtin @and v0, v1
+//     branch v7, #2, #6
+// #2: preds: #1
+//     v8 = builtin @mul v5, v2
+//     upsilon v8 -> ^v11
+//     jump #3
+// #3: preds: #5, #6, #2
+//     builtin @sstore v0, v0
+//     jump #4
+// #4: preds: #3
+//     v11 = phi
+//     v12 = builtin @add v11, v0
+//     return v12
+// #5: preds: #0
+//     upsilon v0 -> ^v11
+//     jump #3
+// #6: preds: #1
+//     upsilon v5 -> ^v11
+//     jump #3
+// }
+//
+// calldata 0x00: {}
+// calldata 0x01: {0x00: 0x01, 0x01: 0x01}
+// calldata 0x02: {0x00: 0x03, 0x01: 0x01, 0x02: 0x02}
+// calldata 0x05: {0x00: 0x1f, 0x01: 0x01, 0x02: 0x02, 0x03: 0x03, 0x04: 0x04, 0x05: 0x05}

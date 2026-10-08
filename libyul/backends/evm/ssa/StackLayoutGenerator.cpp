@@ -393,18 +393,36 @@ void StackLayoutGenerator::visitBlock(SSACFG::BlockId const& _blockId)
 	};
 
 	// A phi takes its value out of its shadow slot in place. If the shadow slot was spilled and dropped, a phi sharing
-	// its key lives on in the memory slot, any other phi reloads the shadow slot.
+	// its key lives on in the memory slot, any other phi reloads the shadow slot. If the shadow slot outlives the phi,
+	// the phi takes a copy of it instead.
 	auto const layoutPhi = [&](InstId const _instId) {
 		ShuffleTrace trace;
-		Stack tracedStack(currentStackData, &trace);
 		auto const shadowSlot = Slot::makeShadow(m_cfg, _instId);
-		if (!tracedStack.findSlotDepth(shadowSlot))
+		auto const phiSlot = Slot::makeValue(m_cfg, _instId);
+		bool const onStack = ranges::contains(currentStackData, shadowSlot);
+		yulAssert(onStack || m_spillSet.isSpilled(shadowSlot), fmt::format("the shadow slot of phi {} is not on the stack", _instId));
+		if (!onStack && m_spillSet.sharesKeyWithShadow(_instId))
 		{
-			yulAssert(m_spillSet.isSpilled(shadowSlot), fmt::format("the shadow slot of phi {} is not on the stack", _instId));
-			if (!m_spillSet.sharesKeyWithShadow(_instId))
-				tracedStack.push(shadowSlot);
+			// the phi lives on in the memory slot of its shadow slot
 		}
-		renameAll(tracedStack, shadowSlot, Slot::makeValue(m_cfg, _instId));
+		else if (m_liveness.shadows().liveBehind(_instId))
+		{
+			StackData target = currentStackData;
+			target.push_back(shadowSlot);
+			auto const spillCountBefore = m_spillSet.numSpilled();
+			auto shuffleResult = stack::shuffle(currentStackData, target, m_spillSet, m_spillingAllowed);
+			yulAssert(shuffleResult.status == stack::ShuffleResult::Status::Admissible, "Spilling not allowed, stack too deep.");
+			yulAssert(m_spillingAllowed || m_spillSet.numSpilled() == spillCountBefore, "Spilling not allowed, stack too deep.");
+			trace = std::move(shuffleResult.trace);
+			Stack(currentStackData, &trace).rename(StackDepth{0}, phiSlot);
+		}
+		else
+		{
+			Stack tracedStack(currentStackData, &trace);
+			if (!onStack)
+				tracedStack.push(shadowSlot);
+			renameAll(tracedStack, shadowSlot, phiSlot);
+		}
 		blockLayout.operationShuffles.push_back(std::move(trace));
 	};
 
