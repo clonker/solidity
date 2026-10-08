@@ -33,7 +33,7 @@ namespace solidity::yul::test::ssa
 
 /// Parses a textual SSA CFG, compiles it with the SSA CFG backend (the SSA CFG passes, stack layout generation and
 /// code transform) and executes the bytecode once per calldata word of the `calldata` setting. The resulting storage
-/// is compared with the storage that a reference interpreter of the SSA CFG produces, which implements Pizlo form
+/// is compared with the storage that `SSACFGInterpreter` produces on the graphs as written, which implements Pizlo form
 /// directly: an upsilon writes the shadow of its phi when it executes and a phi reads its shadow when it executes.
 /// A disagreement is a fatal error. Otherwise the expectation is the optimized SSA CFG followed by the storage per run.
 class ExecutionTest: public frontend::test::TestCase
