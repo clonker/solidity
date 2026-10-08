@@ -1,0 +1,243 @@
+memoryguard = 0x80
+
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v6 = memoryguard
+    builtin @mstore v0, v6
+    v3 = builtin @calldataload v0
+    v7 = builtin @add v3, v3
+    upsilon v7 -> ^v50
+    upsilon v0 -> ^v60
+    v100 = const 0x2
+    v200 = builtin @add v3, v100
+    v101 = const 0x3
+    v201 = builtin @add v3, v101
+    v102 = const 0x4
+    v202 = builtin @add v3, v102
+    v103 = const 0x5
+    v203 = builtin @add v3, v103
+    v104 = const 0x6
+    v204 = builtin @add v3, v104
+    v105 = const 0x7
+    v205 = builtin @add v3, v105
+    v106 = const 0x8
+    v206 = builtin @add v3, v106
+    v107 = const 0x9
+    v207 = builtin @add v3, v107
+    v108 = const 0xa
+    v208 = builtin @add v3, v108
+    v109 = const 0xb
+    v209 = builtin @add v3, v109
+    v110 = const 0xc
+    v210 = builtin @add v3, v110
+    v111 = const 0xd
+    v211 = builtin @add v3, v111
+    v112 = const 0xe
+    v212 = builtin @add v3, v112
+    v113 = const 0xf
+    v213 = builtin @add v3, v113
+    v114 = const 0x10
+    v214 = builtin @add v3, v114
+    v115 = const 0x11
+    v215 = builtin @add v3, v115
+    v116 = const 0x12
+    v216 = builtin @add v3, v116
+    v117 = const 0x13
+    v217 = builtin @add v3, v117
+    jump #1
+#1: preds: #0, #2
+    v60 = phi
+    v61 = builtin @lt v60, v3
+    branch v61, #2, #3
+#2: preds: #1
+    v300 = builtin @add v60, v200
+    builtin @sstore v100, v300
+    v301 = builtin @add v60, v201
+    builtin @sstore v101, v301
+    v302 = builtin @add v60, v202
+    builtin @sstore v102, v302
+    v303 = builtin @add v60, v203
+    builtin @sstore v103, v303
+    v304 = builtin @add v60, v204
+    builtin @sstore v104, v304
+    v305 = builtin @add v60, v205
+    builtin @sstore v105, v305
+    v306 = builtin @add v60, v206
+    builtin @sstore v106, v306
+    v307 = builtin @add v60, v207
+    builtin @sstore v107, v307
+    v308 = builtin @add v60, v208
+    builtin @sstore v108, v308
+    v309 = builtin @add v60, v209
+    builtin @sstore v109, v309
+    v310 = builtin @add v60, v210
+    builtin @sstore v110, v310
+    v311 = builtin @add v60, v211
+    builtin @sstore v111, v311
+    v312 = builtin @add v60, v212
+    builtin @sstore v112, v312
+    v313 = builtin @add v60, v213
+    builtin @sstore v113, v313
+    v314 = builtin @add v60, v214
+    builtin @sstore v114, v314
+    v315 = builtin @add v60, v215
+    builtin @sstore v115, v315
+    v316 = builtin @add v60, v216
+    builtin @sstore v116, v316
+    v317 = builtin @add v60, v217
+    builtin @sstore v117, v317
+    v62 = builtin @add v60, v1
+    upsilon v62 -> ^v60
+    jump #1
+#3: preds: #1
+    v400 = builtin @mul v3, v200
+    v401 = builtin @mul v3, v201
+    jump #4
+#4: preds: #3
+    v50 = phi
+    v600 = builtin @add v50, v400
+    v601 = builtin @add v600, v401
+    v700 = builtin @add v601, v200
+    v701 = builtin @add v700, v201
+    v702 = builtin @add v701, v202
+    v703 = builtin @add v702, v203
+    v704 = builtin @add v703, v204
+    v705 = builtin @add v704, v205
+    v706 = builtin @add v705, v206
+    v707 = builtin @add v706, v207
+    v708 = builtin @add v707, v208
+    v709 = builtin @add v708, v209
+    v710 = builtin @add v709, v210
+    v711 = builtin @add v710, v211
+    v712 = builtin @add v711, v212
+    v713 = builtin @add v712, v213
+    v714 = builtin @add v713, v214
+    v715 = builtin @add v714, v215
+    v716 = builtin @add v715, v216
+    v717 = builtin @add v716, v217
+    builtin @sstore v0, v717
+    main_exit
+// ====
+// calldata: 0 3
+// ----
+// memoryguard = 0x80
+//
+// #0:
+//     v0 = const 0x00
+//     v1 = const 0x01
+//     v2 = memoryguard
+//     builtin @mstore v0, v2
+//     v4 = builtin @calldataload v0
+//     v5 = builtin @add v4, v4
+//     upsilon v0 -> ^v44
+//     v8 = const 0x02
+//     v9 = builtin @add v4, v8
+//     v10 = const 0x03
+//     v11 = builtin @add v4, v10
+//     v12 = const 0x04
+//     v13 = builtin @add v4, v12
+//     v14 = const 0x05
+//     v15 = builtin @add v4, v14
+//     v16 = const 0x06
+//     v17 = builtin @add v4, v16
+//     v18 = const 0x07
+//     v19 = builtin @add v4, v18
+//     v20 = const 0x08
+//     v21 = builtin @add v4, v20
+//     v22 = const 0x09
+//     v23 = builtin @add v4, v22
+//     v24 = const 0x0a
+//     v25 = builtin @add v4, v24
+//     v26 = const 0x0b
+//     v27 = builtin @add v4, v26
+//     v28 = const 0x0c
+//     v29 = builtin @add v4, v28
+//     v30 = const 0x0d
+//     v31 = builtin @add v4, v30
+//     v32 = const 0x0e
+//     v33 = builtin @add v4, v32
+//     v34 = const 0x0f
+//     v35 = builtin @add v4, v34
+//     v36 = const 0x10
+//     v37 = builtin @add v4, v36
+//     v38 = const 0x11
+//     v39 = builtin @add v4, v38
+//     v40 = const 0x12
+//     v41 = builtin @add v4, v40
+//     v42 = const 0x13
+//     v43 = builtin @add v4, v42
+//     jump #1
+// #1: preds: #0, #2
+//     v44 = phi
+//     v45 = builtin @lt v44, v4
+//     branch v45, #2, #3
+// #2: preds: #1
+//     v46 = builtin @add v44, v9
+//     builtin @sstore v8, v46
+//     v48 = builtin @add v44, v11
+//     builtin @sstore v10, v48
+//     v50 = builtin @add v44, v13
+//     builtin @sstore v12, v50
+//     v52 = builtin @add v44, v15
+//     builtin @sstore v14, v52
+//     v54 = builtin @add v44, v17
+//     builtin @sstore v16, v54
+//     v56 = builtin @add v44, v19
+//     builtin @sstore v18, v56
+//     v58 = builtin @add v44, v21
+//     builtin @sstore v20, v58
+//     v60 = builtin @add v44, v23
+//     builtin @sstore v22, v60
+//     v62 = builtin @add v44, v25
+//     builtin @sstore v24, v62
+//     v64 = builtin @add v44, v27
+//     builtin @sstore v26, v64
+//     v66 = builtin @add v44, v29
+//     builtin @sstore v28, v66
+//     v68 = builtin @add v44, v31
+//     builtin @sstore v30, v68
+//     v70 = builtin @add v44, v33
+//     builtin @sstore v32, v70
+//     v72 = builtin @add v44, v35
+//     builtin @sstore v34, v72
+//     v74 = builtin @add v44, v37
+//     builtin @sstore v36, v74
+//     v76 = builtin @add v44, v39
+//     builtin @sstore v38, v76
+//     v78 = builtin @add v44, v41
+//     builtin @sstore v40, v78
+//     v80 = builtin @add v44, v43
+//     builtin @sstore v42, v80
+//     v82 = builtin @add v44, v1
+//     upsilon v82 -> ^v44
+//     jump #1
+// #3: preds: #1
+//     v84 = builtin @mul v4, v9
+//     v85 = builtin @mul v4, v11
+//     v87 = builtin @add v5, v84
+//     v88 = builtin @add v87, v85
+//     v89 = builtin @add v88, v9
+//     v90 = builtin @add v89, v11
+//     v91 = builtin @add v90, v13
+//     v92 = builtin @add v91, v15
+//     v93 = builtin @add v92, v17
+//     v94 = builtin @add v93, v19
+//     v95 = builtin @add v94, v21
+//     v96 = builtin @add v95, v23
+//     v97 = builtin @add v96, v25
+//     v98 = builtin @add v97, v27
+//     v99 = builtin @add v98, v29
+//     v100 = builtin @add v99, v31
+//     v101 = builtin @add v100, v33
+//     v102 = builtin @add v101, v35
+//     v103 = builtin @add v102, v37
+//     v104 = builtin @add v103, v39
+//     v105 = builtin @add v104, v41
+//     v106 = builtin @add v105, v43
+//     builtin @sstore v0, v106
+//     main_exit
+//
+// spilled in <main>: ^phi44 on entry of #1, v37 behind v37, v39 behind v39, v41 behind v41, v43 behind v43
+// calldata 0x00: {0x00: 0xbd}
+// calldata 0x03: {0x00: 0x011a, 0x02: 0x07, 0x03: 0x08, 0x04: 0x09, 0x05: 0x0a, 0x06: 0x0b, 0x07: 0x0c, 0x08: 0x0d, 0x09: 0x0e, 0x0a: 0x0f, 0x0b: 0x10, 0x0c: 0x11, 0x0d: 0x12, 0x0e: 0x13, 0x0f: 0x14, 0x10: 0x15, 0x11: 0x16, 0x12: 0x17, 0x13: 0x18}

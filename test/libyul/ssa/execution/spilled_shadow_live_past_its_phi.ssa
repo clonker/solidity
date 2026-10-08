@@ -1,0 +1,205 @@
+memoryguard = 0x80
+
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v2 = const 0x05
+    v8 = const 0x99
+    v6 = memoryguard
+    builtin @mstore v0, v6
+    v3 = builtin @calldataload v0
+    v100 = const 0x10
+    v200 = builtin @add v3, v100
+    v101 = const 0x11
+    v201 = builtin @add v3, v101
+    v102 = const 0x12
+    v202 = builtin @add v3, v102
+    v103 = const 0x13
+    v203 = builtin @add v3, v103
+    v104 = const 0x14
+    v204 = builtin @add v3, v104
+    v105 = const 0x15
+    v205 = builtin @add v3, v105
+    v106 = const 0x16
+    v206 = builtin @add v3, v106
+    v107 = const 0x17
+    v207 = builtin @add v3, v107
+    v108 = const 0x18
+    v208 = builtin @add v3, v108
+    v109 = const 0x19
+    v209 = builtin @add v3, v109
+    v110 = const 0x1a
+    v210 = builtin @add v3, v110
+    v111 = const 0x1b
+    v211 = builtin @add v3, v111
+    v112 = const 0x1c
+    v212 = builtin @add v3, v112
+    v113 = const 0x1d
+    v213 = builtin @add v3, v113
+    v114 = const 0x1e
+    v214 = builtin @add v3, v114
+    v115 = const 0x1f
+    v215 = builtin @add v3, v115
+    v116 = const 0x20
+    v216 = builtin @add v3, v116
+    v117 = const 0x21
+    v217 = builtin @add v3, v117
+    branch v3, #1, #2
+#1: preds: #0
+    v4 = builtin @mul v3, v3
+    upsilon v4 -> ^v50
+    jump #3
+#2: preds: #0
+    v5 = builtin @add v3, v1
+    upsilon v5 -> ^v50
+    jump #3
+#3: preds: #1, #2
+    v400 = builtin @mul v3, v200
+    v401 = builtin @mul v3, v201
+    builtin @sstore v100, v200
+    builtin @sstore v101, v201
+    builtin @sstore v102, v202
+    builtin @sstore v103, v203
+    builtin @sstore v104, v204
+    builtin @sstore v105, v205
+    builtin @sstore v106, v206
+    builtin @sstore v107, v207
+    builtin @sstore v108, v208
+    builtin @sstore v109, v209
+    builtin @sstore v110, v210
+    builtin @sstore v111, v211
+    builtin @sstore v112, v212
+    builtin @sstore v113, v213
+    builtin @sstore v114, v214
+    builtin @sstore v115, v215
+    builtin @sstore v116, v216
+    builtin @sstore v117, v217
+    jump #4
+#4: preds: #3, #7
+    v50 = phi
+    v10 = builtin @sload v8
+    v12 = builtin @lt v10, v2
+    branch v12, #5, #8
+#5: preds: #4
+    v20 = builtin @add v10, v1
+    builtin @sstore v8, v20
+    v21 = builtin @and v10, v1
+    branch v21, #6, #7
+#6: preds: #5
+    v30 = builtin @add v50, v10
+    upsilon v30 -> ^v50
+    jump #7
+#7: preds: #5, #6
+    builtin @sstore v10, v50
+    jump #4
+#8: preds: #4
+    v600 = builtin @add v50, v400
+    v601 = builtin @add v600, v401
+    builtin @sstore v0, v601
+    main_exit
+// ====
+// calldata: 0 3
+// ----
+// memoryguard = 0x80
+//
+// #0:
+//     v0 = const 0x00
+//     v1 = const 0x01
+//     v2 = const 0x05
+//     v3 = const 0x99
+//     v4 = memoryguard
+//     builtin @mstore v0, v4
+//     v6 = builtin @calldataload v0
+//     v7 = const 0x10
+//     v8 = builtin @add v6, v7
+//     v9 = const 0x11
+//     v10 = builtin @add v6, v9
+//     v11 = const 0x12
+//     v12 = builtin @add v6, v11
+//     v13 = const 0x13
+//     v14 = builtin @add v6, v13
+//     v15 = const 0x14
+//     v16 = builtin @add v6, v15
+//     v17 = const 0x15
+//     v18 = builtin @add v6, v17
+//     v19 = const 0x16
+//     v20 = builtin @add v6, v19
+//     v21 = const 0x17
+//     v22 = builtin @add v6, v21
+//     v23 = const 0x18
+//     v24 = builtin @add v6, v23
+//     v25 = const 0x19
+//     v26 = builtin @add v6, v25
+//     v27 = const 0x1a
+//     v28 = builtin @add v6, v27
+//     v29 = const 0x1b
+//     v30 = builtin @add v6, v29
+//     v31 = const 0x1c
+//     v32 = builtin @add v6, v31
+//     v33 = const 0x1d
+//     v34 = builtin @add v6, v33
+//     v35 = const 0x1e
+//     v36 = builtin @add v6, v35
+//     v37 = const 0x1f
+//     v38 = builtin @add v6, v37
+//     v39 = const 0x20
+//     v40 = builtin @add v6, v39
+//     v41 = const 0x21
+//     v42 = builtin @add v6, v41
+//     branch v6, #1, #2
+// #1: preds: #0
+//     v43 = builtin @mul v6, v6
+//     upsilon v43 -> ^v67
+//     jump #3
+// #2: preds: #0
+//     v45 = builtin @add v6, v1
+//     upsilon v45 -> ^v67
+//     jump #3
+// #3: preds: #1, #2
+//     v47 = builtin @mul v6, v8
+//     v48 = builtin @mul v6, v10
+//     builtin @sstore v7, v8
+//     builtin @sstore v9, v10
+//     builtin @sstore v11, v12
+//     builtin @sstore v13, v14
+//     builtin @sstore v15, v16
+//     builtin @sstore v17, v18
+//     builtin @sstore v19, v20
+//     builtin @sstore v21, v22
+//     builtin @sstore v23, v24
+//     builtin @sstore v25, v26
+//     builtin @sstore v27, v28
+//     builtin @sstore v29, v30
+//     builtin @sstore v31, v32
+//     builtin @sstore v33, v34
+//     builtin @sstore v35, v36
+//     builtin @sstore v37, v38
+//     builtin @sstore v39, v40
+//     builtin @sstore v41, v42
+//     jump #4
+// #4: preds: #3, #7
+//     v67 = phi
+//     v68 = builtin @sload v3
+//     v69 = builtin @lt v68, v2
+//     branch v69, #5, #8
+// #5: preds: #4
+//     v70 = builtin @add v68, v1
+//     builtin @sstore v3, v70
+//     v72 = builtin @and v68, v1
+//     branch v72, #6, #7
+// #6: preds: #5
+//     v73 = builtin @add v67, v68
+//     upsilon v73 -> ^v67
+//     jump #7
+// #7: preds: #5, #6
+//     builtin @sstore v68, v67
+//     jump #4
+// #8: preds: #4
+//     v76 = builtin @add v67, v47
+//     v77 = builtin @add v76, v48
+//     builtin @sstore v0, v77
+//     main_exit
+//
+// spilled in <main>: ^phi67 on entry of #3, ^phi67 on entry of #7, v38 behind v38, v40 behind v40, v42 behind v42
+// calldata 0x00: {0x00: 0x05, 0x01: 0x01, 0x02: 0x02, 0x03: 0x02, 0x04: 0x05, 0x10: 0x10, 0x11: 0x11, 0x12: 0x12, 0x13: 0x13, 0x14: 0x14, 0x15: 0x15, 0x16: 0x16, 0x17: 0x17, 0x18: 0x18, 0x19: 0x19, 0x1a: 0x1a, 0x1b: 0x1b, 0x1c: 0x1c, 0x1d: 0x1d, 0x1e: 0x1e, 0x1f: 0x1f, 0x20: 0x20, 0x21: 0x21, 0x99: 0x05}
+// calldata 0x03: {0x00: 0x82, 0x01: 0x09, 0x02: 0x0a, 0x03: 0x0a, 0x04: 0x0d, 0x10: 0x13, 0x11: 0x14, 0x12: 0x15, 0x13: 0x16, 0x14: 0x17, 0x15: 0x18, 0x16: 0x19, 0x17: 0x1a, 0x18: 0x1b, 0x19: 0x1c, 0x1a: 0x1d, 0x1b: 0x1e, 0x1c: 0x1f, 0x1d: 0x20, 0x1e: 0x21, 0x1f: 0x22, 0x20: 0x23, 0x21: 0x24, 0x99: 0x05}

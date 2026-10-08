@@ -180,6 +180,8 @@ set(libyul_sources
     libyul/ssa/CallGraphTest.h
     libyul/ssa/ControlFlowGraphTest.cpp
     libyul/ssa/ControlFlowGraphTest.h
+    libyul/ssa/ExecutionTest.cpp
+    libyul/ssa/ExecutionTest.h
     libyul/ssa/ParserTest.cpp
     libyul/ssa/ParserTest.h
     libyul/ssa/PrinterTest.cpp

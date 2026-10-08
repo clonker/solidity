@@ -1,0 +1,60 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v2 = const 0x02
+    v3 = const 0x03
+    v4 = builtin @calldataload v0
+    branch v4, #1, #2
+#1: preds: #0
+    v10 = builtin @add v4, v1
+    upsilon v10 -> ^v30
+    v11 = builtin @mul v4, v3
+    builtin @sstore v1, v11
+    jump #3
+#2: preds: #0
+    v12 = builtin @add v4, v2
+    upsilon v12 -> ^v30
+    builtin @sstore v2, v12
+    jump #3
+#3: preds: #1, #2
+    v20 = builtin @mul v4, v4
+    builtin @sstore v3, v20
+    jump #4
+#4: preds: #3
+    v30 = phi
+    v31 = builtin @add v30, v4
+    builtin @sstore v0, v31
+    main_exit
+// ====
+// calldata: 0 7
+// ----
+// #0:
+//     v0 = const 0x00
+//     v1 = const 0x01
+//     v2 = const 0x02
+//     v3 = const 0x03
+//     v4 = builtin @calldataload v0
+//     branch v4, #1, #2
+// #1: preds: #0
+//     v5 = builtin @add v4, v1
+//     upsilon v5 -> ^v14
+//     v7 = builtin @mul v4, v3
+//     builtin @sstore v1, v7
+//     jump #3
+// #2: preds: #0
+//     v9 = builtin @add v4, v2
+//     upsilon v9 -> ^v14
+//     builtin @sstore v2, v9
+//     jump #3
+// #3: preds: #1, #2
+//     v12 = builtin @mul v4, v4
+//     builtin @sstore v3, v12
+//     jump #4
+// #4: preds: #3
+//     v14 = phi
+//     v15 = builtin @add v14, v4
+//     builtin @sstore v0, v15
+//     main_exit
+//
+// calldata 0x00: {0x00: 0x02, 0x02: 0x02}
+// calldata 0x07: {0x00: 0x0f, 0x01: 0x15, 0x03: 0x31}

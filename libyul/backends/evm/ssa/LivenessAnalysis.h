@@ -36,9 +36,10 @@ namespace solidity::yul::ssa
 /// In Pizlo form, a phi has no inputs and is defined at its position, like any other Inst, so the algorithm needs
 /// no PhiDefs.
 ///
-/// The upsilons of a block take effect on its out-edge: a block with upsilons ends in a jump (see
-/// `CriticalEdgeBreaker`), and nothing between an upsilon and the edge observes the shadow it writes, since the phi
-/// is the shadow's only reader and never follows an upsilon for it in the same block (see `TrivialPhiEliminator`).
+/// The upsilons of a block take effect on its out-edge: a block with upsilons does not end in a conditional jump (see
+/// `CriticalEdgeBreaker`), so it has at most one out-edge, and nothing between an upsilon and the edge observes the
+/// shadow it writes, since the phi is the shadow's only reader and never follows an upsilon for it in the same block
+/// (see `TrivialPhiEliminator`).
 /// An upsilon's input is thus read at the end of the block, and only if its write is live: it is the block's last
 /// upsilon for its phi and the shadow is live on exit (`ShadowLiveness`).
 ///

@@ -85,7 +85,10 @@ void LivenessAnalysis::runDagDfs()
 		// live <- PhiUses(B), the inputs of the writes on the block's out-edge that reach a phi
 		LivenessData live{};
 		m_cfg.forEachUpsilon(block, [&](InstId const instId, SSACFG::Inst const&) {
-			yulAssert(block.isJumpBlock(), fmt::format("upsilon {} in a block that does not end in a jump", instId));
+			yulAssert(
+				!std::holds_alternative<SSACFG::BasicBlock::ConditionalJump>(block.exit),
+				fmt::format("upsilon {} in a block that ends in a conditional jump", instId)
+			);
 		});
 		for (auto const& [phi, v]: m_shadows.liveWrites(blockId))
 		{
