@@ -419,8 +419,10 @@ void ExpressionEvaluator::runExternalCall(evmasm::Instruction _instruction)
 	{
 		(*newInterpreter)(*ast);
 	}
-	catch (ExplicitlyTerminatedWithReturn const&)
+	catch (ExplicitlyTerminated const& _terminated)
 	{
+		if (_terminated.termination() != Termination::Return)
+			throw;
 		// Copy return data to our memory
 		copyZeroExtended(
 			m_state.memory,

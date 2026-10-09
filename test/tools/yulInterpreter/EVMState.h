@@ -41,12 +41,26 @@ class InterpreterTerminatedGeneric: public util::Exception
 {
 };
 
-class ExplicitlyTerminated: public InterpreterTerminatedGeneric
+/// How an instruction that terminates execution ends it
+enum class Termination
 {
+	Stop,
+	Return,
+	Revert,
+	Invalid,
+	SelfDestruct
 };
 
-class ExplicitlyTerminatedWithReturn: public ExplicitlyTerminated
+/// Thrown by an instruction that terminates execution
+class ExplicitlyTerminated: public InterpreterTerminatedGeneric
 {
+public:
+	explicit ExplicitlyTerminated(Termination _termination): m_termination(_termination) {}
+
+	Termination termination() const { return m_termination; }
+
+private:
+	Termination m_termination;
 };
 
 class StepLimitReached: public InterpreterTerminatedGeneric

@@ -123,7 +123,7 @@ u256 EVMInstructionInterpreter::eval(
 	{
 	case Instruction::STOP:
 		logTrace(_instruction);
-		BOOST_THROW_EXCEPTION(ExplicitlyTerminated());
+		BOOST_THROW_EXCEPTION(ExplicitlyTerminated(Termination::Stop));
 	// --------------- arithmetic ---------------
 	case Instruction::ADD:
 		return arg[0] + arg[1];
@@ -399,26 +399,26 @@ u256 EVMInstructionInterpreter::eval(
 		if (accessMemory(arg[0], arg[1]))
 			m_state.returndata = m_state.readMemory(arg[0], arg[1]);
 		logTrace(_instruction, arg, m_state.returndata);
-		BOOST_THROW_EXCEPTION(ExplicitlyTerminatedWithReturn());
+		BOOST_THROW_EXCEPTION(ExplicitlyTerminated(Termination::Return));
 	}
 	case Instruction::REVERT:
 		accessMemory(arg[0], arg[1]);
 		logTrace(_instruction, arg);
 		m_state.storage.clear();
 		m_state.transientStorage.clear();
-		BOOST_THROW_EXCEPTION(ExplicitlyTerminated());
+		BOOST_THROW_EXCEPTION(ExplicitlyTerminated(Termination::Revert));
 	case Instruction::INVALID:
 		logTrace(_instruction);
 		m_state.storage.clear();
 		m_state.transientStorage.clear();
 		m_state.trace.clear();
-		BOOST_THROW_EXCEPTION(ExplicitlyTerminated());
+		BOOST_THROW_EXCEPTION(ExplicitlyTerminated(Termination::Invalid));
 	case Instruction::SELFDESTRUCT:
 		logTrace(_instruction, arg);
 		m_state.storage.clear();
 		m_state.transientStorage.clear();
 		m_state.trace.clear();
-		BOOST_THROW_EXCEPTION(ExplicitlyTerminated());
+		BOOST_THROW_EXCEPTION(ExplicitlyTerminated(Termination::SelfDestruct));
 	case Instruction::POP:
 		return 0;
 	// --------------- invalid in strict assembly ---------------
