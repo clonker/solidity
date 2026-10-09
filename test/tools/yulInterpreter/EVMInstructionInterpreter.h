@@ -69,7 +69,7 @@ void copyZeroExtendedWithOverlap(
 	size_t _size
 );
 
-struct InterpreterState;
+struct EVMState;
 
 /**
  * Interprets EVM instructions based on the current state and logs instructions with
@@ -93,7 +93,7 @@ struct InterpreterState;
 class EVMInstructionInterpreter
 {
 public:
-	explicit EVMInstructionInterpreter(langutil::EVMVersion _evmVersion, InterpreterState& _state, bool _disableMemWriteTrace):
+	explicit EVMInstructionInterpreter(langutil::EVMVersion _evmVersion, EVMState& _state, bool _disableMemWriteTrace):
 		m_evmVersion(_evmVersion),
 		m_state(_state),
 		m_disableMemoryWriteInstructions(_disableMemWriteTrace)
@@ -165,7 +165,7 @@ private:
 	}
 
 	langutil::EVMVersion m_evmVersion;
-	InterpreterState& m_state;
+	EVMState& m_state;
 	/// Flag to disable trace of instructions that write to memory.
 	bool m_disableMemoryWriteInstructions;
 	/// mapping from linker identifier (hash of literal) to original string representation, populated by linkersymbol

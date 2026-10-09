@@ -1,6 +1,8 @@
 set(sources
 	EVMInstructionInterpreter.h
 	EVMInstructionInterpreter.cpp
+	EVMState.h
+	EVMState.cpp
 	Interpreter.h
 	Interpreter.cpp
 	Inspector.h

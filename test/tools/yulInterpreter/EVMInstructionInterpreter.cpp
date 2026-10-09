@@ -21,7 +21,7 @@
 
 #include <test/tools/yulInterpreter/EVMInstructionInterpreter.h>
 
-#include <test/tools/yulInterpreter/Interpreter.h>
+#include <test/tools/yulInterpreter/EVMState.h>
 
 #include <libyul/backends/evm/EVMDialect.h>
 #include <libyul/AST.h>
