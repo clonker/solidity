@@ -562,7 +562,10 @@ TestCase::TestResult SemanticTest::tryRunTestWithYulOptimizer(
 				continue;
 		}
 
-		if (m_requiresYulOptimizer != requiresYulOptimizer && result != TestResult::FatalError)
+		// The setting is what the Yul pipeline requires. The SSA CFG pipeline spills instead of running out of stack, so
+		// it may get by with less of the optimizer.
+		bool const ssaCFGRequiresLess = _isSSACFGRun && requiresYulOptimizer < m_requiresYulOptimizer;
+		if (m_requiresYulOptimizer != requiresYulOptimizer && !ssaCFGRequiresLess && result != TestResult::FatalError)
 		{
 			soltestAssert(result == TestResult::Success || result == TestResult::Failure);
 
