@@ -33,6 +33,7 @@
 
 #include <test/libyul/ssa/CallGraphTest.h>
 #include <test/libyul/ssa/ControlFlowGraphTest.h>
+#include <test/libyul/ssa/InterpreterTest.h>
 #include <test/libyul/ssa/ParserTest.h>
 #include <test/libyul/ssa/PrinterTest.h>
 #include <test/libyul/ssa/SpillTest.h>
@@ -84,6 +85,7 @@ Testsuite const g_interactiveTestsuites[] = {
 	{"Yul SSA Call Graph",          "libyul",      "ssa/callGraph",                 false, false, &yul::test::ssa::CallGraphTest::create},
 	{"Yul SSA Printer",             "libyul",      "ssa/printer",                   false, false, &yul::test::ssa::PrinterTest::create},
 	{"Yul SSA Parser",              "libyul",      "ssa/parser",                    false, false, &yul::test::ssa::ParserTest::create},
+	{"Yul SSA Interpreter",         "libyul",      "ssa/interpreter",               false, false, &yul::test::ssa::InterpreterTest::create},
 	{"Yul SSA StackShuffling",      "libyul",      "ssa/stackShuffler",             false, false, &yul::test::ssa::ShufflingTest::create},
 	{"Yul SSA StackLayoutGenerator","libyul",      "ssa/stackLayoutGenerator",      false, false, &yul::test::ssa::StackLayoutGeneratorTest::create},
 	{"Yul SSA Spill",               "libyul",      "ssa/spill",                     false, false, &yul::test::ssa::SpillTest::create},

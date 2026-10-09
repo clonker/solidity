@@ -1,0 +1,13 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    builtin @sstore v0, v1
+    builtin @revert v0, v0
+    terminated
+// ----
+// Termination: revert
+// Trace:
+//   REVERT(0, 0)
+// Memory dump:
+// Storage dump:
+// Transient storage dump:

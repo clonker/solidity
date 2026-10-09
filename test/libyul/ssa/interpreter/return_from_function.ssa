@@ -1,0 +1,22 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x2a
+    builtin @mstore v0, v1
+    call @r { nocontinue = true }
+    terminated
+
+func @r(args: ()) -> 0 nocontinue {
+#0:
+    v0 = const 0x00
+    v1 = const 0x20
+    builtin @return v0, v1
+    terminated
+}
+// ----
+// Termination: return
+// Trace:
+//   RETURN(0, 32) [000000000000000000000000000000000000000000000000000000000000002a]
+// Memory dump:
+//      0: 000000000000000000000000000000000000000000000000000000000000002a
+// Storage dump:
+// Transient storage dump:

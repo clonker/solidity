@@ -1,0 +1,13 @@
+#0:
+    jump #1
+#1: preds: #0, #2
+    jump #2
+#2: preds: #1
+    jump #1
+// ----
+// Termination: limit reached
+// Trace:
+//   Interpreter execution step limit reached.
+// Memory dump:
+// Storage dump:
+// Transient storage dump:

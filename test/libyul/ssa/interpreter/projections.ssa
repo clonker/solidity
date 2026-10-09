@@ -1,0 +1,21 @@
+#0:
+    v0 = const 0x05
+    v1 = call @pair v0
+    v2 = proj v1, 0
+    v3 = proj v1, 1
+    builtin @sstore v2, v3
+    main_exit
+
+func @pair(args: (v0)) -> 2 {
+#0:
+    v0 = arg 0
+    v1 = const 0x2222
+    return v0, v1
+}
+// ----
+// Termination: stop
+// Trace:
+// Memory dump:
+// Storage dump:
+//   0000000000000000000000000000000000000000000000000000000000000005: 0000000000000000000000000000000000000000000000000000000000002222
+// Transient storage dump:

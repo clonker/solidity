@@ -7,6 +7,8 @@ set(sources
 	Interpreter.cpp
 	Inspector.h
 	Inspector.cpp
+	SSACFGInterpreter.h
+	SSACFGInterpreter.cpp
 )
 
 add_library(yulInterpreter ${sources})

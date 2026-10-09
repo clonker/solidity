@@ -1,0 +1,32 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v2 = const 0x02
+    upsilon v0 -> ^v10
+    jump #1
+#1: preds: #0, #4
+    v10 = phi
+    v11 = builtin @lt v10, v2
+    upsilon v10 -> ^v20
+    branch v11, #2, #5
+#2: preds: #1
+    branch v10, #3, #4
+#3: preds: #2
+    v30 = builtin @add v10, v2
+    upsilon v30 -> ^v20
+    jump #4
+#4: preds: #2, #3
+    v20 = phi
+    builtin @sstore v10, v20
+    v21 = builtin @add v10, v1
+    upsilon v21 -> ^v10
+    jump #1
+#5: preds: #1
+    main_exit
+// ----
+// Termination: stop
+// Trace:
+// Memory dump:
+// Storage dump:
+//   0000000000000000000000000000000000000000000000000000000000000001: 0000000000000000000000000000000000000000000000000000000000000003
+// Transient storage dump:
