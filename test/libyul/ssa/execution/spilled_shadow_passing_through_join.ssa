@@ -204,7 +204,6 @@ memoryguard = 0x80
 //     builtin @sstore v0, v88
 //     main_exit
 // #5: preds: #0
-//     upsilon v5 -> ^v68
 //     upsilon v43 -> ^v68
 //     jump #2
 //

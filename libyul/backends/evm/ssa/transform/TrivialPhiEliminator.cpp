@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <vector>
 
 using namespace solidity;
@@ -53,6 +54,62 @@ InstId valueWrittenAheadOf(SSACFG const& _cfg, InstId const _phi)
 	solidity::util::unreachable();
 }
 
+/// Turns the upsilons into nops whose writes no phi reads: on every path from such an upsilon to its phi, another
+/// upsilon for the phi comes first.
+void removeDeadWrites(SSACFG& _cfg)
+{
+	// the last upsilon for `_phi` in [_begin, _end), unset if there is none
+	auto const lastWrite = [&](auto const _begin, auto _end, InstId const _phi) {
+		while (_end != _begin)
+			if (InstId const id = *--_end; _cfg.isUpsilon(id) && _cfg.upsilonPhi(id) == _phi)
+				return id;
+		return InstId{};
+	};
+	std::set<InstId> read;
+	std::vector<std::uint8_t> visited;
+	std::vector<BlockId> toVisit;
+	for (BlockId const blockId: _cfg.liveBlocks())
+	{
+		auto const& instructions = _cfg.block(blockId).instructions;
+		for (auto it = instructions.begin(); it != instructions.end(); ++it)
+		{
+			if (!_cfg.isPhi(*it))
+				continue;
+			InstId const phi = *it;
+			if (InstId const write = lastWrite(instructions.begin(), it, phi); write.hasValue())
+			{
+				read.insert(write);
+				continue;
+			}
+			visited.assign(_cfg.numBlocks(), false);
+			toVisit.assign(_cfg.block(blockId).entries.begin(), _cfg.block(blockId).entries.end());
+			while (!toVisit.empty())
+			{
+				BlockId const predecessor = toVisit.back();
+				toVisit.pop_back();
+				if (visited[predecessor.value])
+					continue;
+				visited[predecessor.value] = true;
+				auto const& predecessorInstructions = _cfg.block(predecessor).instructions;
+				if (
+					InstId const write = lastWrite(predecessorInstructions.begin(), predecessorInstructions.end(), phi);
+					write.hasValue()
+				)
+				{
+					read.insert(write);
+					continue;
+				}
+				auto const& entries = _cfg.block(predecessor).entries;
+				toVisit.insert(toVisit.end(), entries.begin(), entries.end());
+			}
+		}
+	}
+	for (BlockId const blockId: _cfg.liveBlocks())
+		for (InstId const id: _cfg.block(blockId).instructions)
+			if (_cfg.isUpsilon(id) && !read.contains(id))
+				_cfg.replaceWithNop(id);
+}
+
 }
 
 void transform::eliminateTrivialPhis(SSACFG& _cfg)
@@ -65,6 +122,7 @@ void transform::eliminateTrivialPhis(SSACFG& _cfg)
 			if (inst.isUpsilon() && _cfg.isUnreachable(inst.inputs[0]))
 				_cfg.replaceWithNop(id);
 		}
+	removeDeadWrites(_cfg);
 
 	// Build per-phi indices
 	std::map<InstId, std::vector<InstId>> upsilonsTargeting;

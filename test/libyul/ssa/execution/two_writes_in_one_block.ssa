@@ -33,7 +33,6 @@
 //     branch v3, #1, #4
 // #1: preds: #0
 //     builtin @sstore v1, v4
-//     upsilon v4 -> ^v12
 //     upsilon v1 -> ^v12
 //     jump #3
 // #2: preds: #4
@@ -44,7 +43,6 @@
 //     builtin @sstore v0, v12
 //     main_exit
 // #4: preds: #0
-//     upsilon v4 -> ^v12
 //     upsilon v6 -> ^v12
 //     jump #2
 //

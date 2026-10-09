@@ -26,10 +26,7 @@
 
 #include <range/v3/algorithm/find.hpp>
 
-#include <cstdint>
-#include <iterator>
 #include <optional>
-#include <vector>
 
 using namespace solidity;
 using namespace solidity::yul;
@@ -60,48 +57,6 @@ std::optional<bool> evaluateCondition(SSACFG const& _cfg, BuiltinHandle const& _
 	return std::nullopt;
 }
 
-/// Whether a phi can read the write of `_upsilon`: some path from the upsilon reaches its phi before another upsilon
-/// for it. The write need not be read in the upsilon's successor, it can pass through any number of blocks.
-bool isWriteRead(SSACFG const& _cfg, InstId const _upsilon)
-{
-	InstId const phi = _cfg.upsilonPhi(_upsilon);
-	// whether the phi reads the shadow first (true), an upsilon overwrites it first (false), or neither (nullopt)
-	auto const scan = [&](auto _begin, auto const _end) -> std::optional<bool> {
-		for (; _begin != _end; ++_begin)
-			if (*_begin == phi)
-				return true;
-			else if (_cfg.isUpsilon(*_begin) && _cfg.upsilonPhi(*_begin) == phi)
-				return false;
-		return std::nullopt;
-	};
-
-	BlockId const origin = _cfg.inst(_upsilon).block;
-	auto const& instructions = _cfg.block(origin).instructions;
-	if (std::optional<bool> const read = scan(std::next(ranges::find(instructions, _upsilon)), instructions.end()))
-		return *read;
-
-	std::vector<std::uint8_t> visited(_cfg.numBlocks(), false);
-	std::vector<BlockId> toVisit;
-	_cfg.block(origin).forEachExit([&](BlockId const _successor) { toVisit.push_back(_successor); });
-	while (!toVisit.empty())
-	{
-		BlockId const blockId = toVisit.back();
-		toVisit.pop_back();
-		if (visited[blockId.value])
-			continue;
-		visited[blockId.value] = true;
-		auto const& block = _cfg.block(blockId);
-		if (std::optional<bool> const read = scan(block.instructions.begin(), block.instructions.end()))
-		{
-			if (*read)
-				return true;
-			continue;
-		}
-		block.forEachExit([&](BlockId const _successor) { toVisit.push_back(_successor); });
-	}
-	return false;
-}
-
 }
 
 void transform::foldConstantConditions(SSACFG& _cfg)
@@ -130,20 +85,12 @@ void transform::foldConstantConditions(SSACFG& _cfg)
 
 		if (dropped != taken)
 		{
-			// Detach the edge blockId -> dropped: drop the predecessor entry and turn the upsilons that fed
-			// dropped's phis along this edge into nops, unless their writes still reach a phi through `taken`.
+			// Detach the edge blockId -> dropped. The upsilons are writes, not tied to the edge: the ones whose phis go
+			// unreachable are dropped by the unreachable block cleaner.
 			auto& droppedEntries = _cfg.block(dropped).entries;
 			auto const entry = ranges::find(droppedEntries, blockId);
 			yulAssert(entry != droppedEntries.end());
 			droppedEntries.erase(entry);
-
-			for (InstId const instId: block.instructions)
-				if (
-					_cfg.isUpsilon(instId) &&
-					_cfg.inst(_cfg.upsilonPhi(instId)).block == dropped &&
-					!isWriteRead(_cfg, instId)
-				)
-					_cfg.replaceWithNop(instId);
 		}
 
 		if (_cfg.isOperation(conditionId) && _cfg.inst(conditionId).block == blockId)
