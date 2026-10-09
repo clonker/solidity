@@ -1,0 +1,27 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v3 = builtin @calldataload v0
+    upsilon v3 -> ^v20
+    jump #1
+#1: preds: #0
+    branch v1, #2, #3
+#2: preds: #1
+    builtin @sstore v0, v1
+    main_exit
+#3: preds: #1
+    v20 = phi
+    builtin @sstore v0, v20
+    main_exit
+// ====
+// calldata: 0 5
+// ----
+// #0:
+//     v0 = const 0x00
+//     v1 = const 0x01
+//     v2 = builtin @calldataload v0
+//     builtin @sstore v0, v1
+//     main_exit
+//
+// calldata 0x00: {0x00: 0x01}
+// calldata 0x05: {0x00: 0x01}

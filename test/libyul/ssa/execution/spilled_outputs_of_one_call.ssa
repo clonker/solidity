@@ -1,0 +1,166 @@
+memoryguard = 0x80
+
+#0:
+    v0 = const 0x00
+    v3 = memoryguard
+    v4 = const 0x40
+    builtin @mstore v4, v3
+    v5 = builtin @calldataload v0
+    v6 = call @many v5
+    v100 = proj v6, 0
+    v101 = proj v6, 1
+    v102 = proj v6, 2
+    v103 = proj v6, 3
+    v104 = proj v6, 4
+    v105 = proj v6, 5
+    v106 = proj v6, 6
+    v107 = proj v6, 7
+    v108 = proj v6, 8
+    v109 = proj v6, 9
+    v110 = proj v6, 10
+    v111 = proj v6, 11
+    v112 = proj v6, 12
+    v113 = proj v6, 13
+    v114 = proj v6, 14
+    v115 = proj v6, 15
+    v116 = proj v6, 16
+    v117 = proj v6, 17
+    builtin @sstore v100, v101
+    builtin @sstore v102, v103
+    builtin @sstore v104, v105
+    builtin @sstore v106, v107
+    builtin @sstore v108, v109
+    builtin @sstore v110, v111
+    builtin @sstore v112, v113
+    builtin @sstore v114, v115
+    builtin @sstore v116, v117
+    main_exit
+
+func @many(args: (v0)) -> 18 {
+#0:
+    v0 = arg 0
+    v200 = const 0x1
+    v300 = builtin @add v0, v200
+    v201 = const 0x2
+    v301 = builtin @add v0, v201
+    v202 = const 0x3
+    v302 = builtin @add v0, v202
+    v203 = const 0x4
+    v303 = builtin @add v0, v203
+    v204 = const 0x5
+    v304 = builtin @add v0, v204
+    v205 = const 0x6
+    v305 = builtin @add v0, v205
+    v206 = const 0x7
+    v306 = builtin @add v0, v206
+    v207 = const 0x8
+    v307 = builtin @add v0, v207
+    v208 = const 0x9
+    v308 = builtin @add v0, v208
+    v209 = const 0xa
+    v309 = builtin @add v0, v209
+    v210 = const 0xb
+    v310 = builtin @add v0, v210
+    v211 = const 0xc
+    v311 = builtin @add v0, v211
+    v212 = const 0xd
+    v312 = builtin @add v0, v212
+    v213 = const 0xe
+    v313 = builtin @add v0, v213
+    v214 = const 0xf
+    v314 = builtin @add v0, v214
+    v215 = const 0x10
+    v315 = builtin @add v0, v215
+    v216 = const 0x11
+    v316 = builtin @add v0, v216
+    v217 = const 0x12
+    v317 = builtin @add v0, v217
+    return v300, v301, v302, v303, v304, v305, v306, v307, v308, v309, v310, v311, v312, v313, v314, v315, v316, v317
+}
+// ====
+// calldata: 0 4
+// ----
+// memoryguard = 0x80
+//
+// #0:
+//     v0 = const 0x00
+//     v1 = memoryguard
+//     v2 = const 0x40
+//     builtin @mstore v2, v1
+//     v4 = builtin @calldataload v0
+//     v5 = call @many v4
+//     v6 = proj v5, 0
+//     v7 = proj v5, 1
+//     v8 = proj v5, 2
+//     v9 = proj v5, 3
+//     v10 = proj v5, 4
+//     v11 = proj v5, 5
+//     v12 = proj v5, 6
+//     v13 = proj v5, 7
+//     v14 = proj v5, 8
+//     v15 = proj v5, 9
+//     v16 = proj v5, 10
+//     v17 = proj v5, 11
+//     v18 = proj v5, 12
+//     v19 = proj v5, 13
+//     v20 = proj v5, 14
+//     v21 = proj v5, 15
+//     v22 = proj v5, 16
+//     v23 = proj v5, 17
+//     builtin @sstore v6, v7
+//     builtin @sstore v8, v9
+//     builtin @sstore v10, v11
+//     builtin @sstore v12, v13
+//     builtin @sstore v14, v15
+//     builtin @sstore v16, v17
+//     builtin @sstore v18, v19
+//     builtin @sstore v20, v21
+//     builtin @sstore v22, v23
+//     main_exit
+//
+// func @many(args: (v0)) -> 18 {
+// #0:
+//     v0 = arg 0
+//     v1 = const 0x01
+//     v2 = builtin @add v0, v1
+//     v3 = const 0x02
+//     v4 = builtin @add v0, v3
+//     v5 = const 0x03
+//     v6 = builtin @add v0, v5
+//     v7 = const 0x04
+//     v8 = builtin @add v0, v7
+//     v9 = const 0x05
+//     v10 = builtin @add v0, v9
+//     v11 = const 0x06
+//     v12 = builtin @add v0, v11
+//     v13 = const 0x07
+//     v14 = builtin @add v0, v13
+//     v15 = const 0x08
+//     v16 = builtin @add v0, v15
+//     v17 = const 0x09
+//     v18 = builtin @add v0, v17
+//     v19 = const 0x0a
+//     v20 = builtin @add v0, v19
+//     v21 = const 0x0b
+//     v22 = builtin @add v0, v21
+//     v23 = const 0x0c
+//     v24 = builtin @add v0, v23
+//     v25 = const 0x0d
+//     v26 = builtin @add v0, v25
+//     v27 = const 0x0e
+//     v28 = builtin @add v0, v27
+//     v29 = const 0x0f
+//     v30 = builtin @add v0, v29
+//     v31 = const 0x10
+//     v32 = builtin @add v0, v31
+//     v33 = const 0x11
+//     v34 = builtin @add v0, v33
+//     v35 = const 0x12
+//     v36 = builtin @add v0, v35
+//     return v2, v4, v6, v8, v10, v12, v14, v16, v18, v20, v22, v24, v26, v28, v30, v32, v34, v36
+// }
+//
+// spilled in <main>: v23 behind v5, v7 behind v5
+// spilled in @many: v32 behind v32, v36 behind v36
+// calldata 0x00: {0x01: 0x02, 0x03: 0x04, 0x05: 0x06, 0x07: 0x08, 0x09: 0x0a, 0x0b: 0x0c, 0x0d: 0x0e, 0x0f: 0x10, 0x11: 0x12}
+// calldata 0x04: {0x05: 0x06, 0x07: 0x08, 0x09: 0x0a, 0x0b: 0x0c, 0x0d: 0x0e, 0x0f: 0x10, 0x11: 0x12, 0x13: 0x14, 0x15: 0x16}

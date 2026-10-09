@@ -49,6 +49,12 @@ void transform::cleanUnreachableBlocks(SSACFG& _cfg)
 	}
 
 	auto& store = _cfg.instructionStore();
+	// an upsilon whose phi goes unreachable writes a shadow no phi reads
+	for (SSACFG::BlockId const blockId: _cfg.liveBlocks())
+		if (reachable[blockId.value])
+			for (InstId const id: _cfg.block(blockId).instructions)
+				if (_cfg.isUpsilon(id) && !reachable[_cfg.inst(_cfg.upsilonPhi(id)).block.value])
+					_cfg.replaceWithNop(id);
 	for (SSACFG::BlockId const blockId: _cfg.liveBlocks())
 	{
 		if (reachable[blockId.value])
