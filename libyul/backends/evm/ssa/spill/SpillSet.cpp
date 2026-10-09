@@ -25,8 +25,14 @@
 
 #include <range/v3/algorithm/contains.hpp>
 #include <range/v3/algorithm/find.hpp>
+#include <range/v3/algorithm/sort.hpp>
+#include <range/v3/view/reverse.hpp>
 
-#include <deque>
+#include <cstddef>
+#include <map>
+#include <set>
+#include <utility>
+#include <vector>
 
 using namespace solidity::yul::ssa;
 using namespace solidity::yul::ssa::spill;
@@ -81,22 +87,31 @@ std::size_t positionInBlock(SSACFG const& _cfg, InstId const _id)
 	return static_cast<std::size_t>(std::distance(instructions.begin(), it));
 }
 
-/// The symbolic stack the Emitter faces behind `_site`, where the `mstore` of a value stored there fires. Two cases:
-/// - a function argument: it has no producer operation and lives on the function entry stack, where CodeTransform emits `mstore` while the args are still laid out;
-/// - any other Inst: right behind it.
+/// The symbolic stack the Emitter faces right behind the Inst `_site`, where the `mstore` of a value stored there fires
 StackData defStackFor(
 	SSACFG const& _cfg,
 	SSACFGStackLayout const& _layout,
 	InstId const _site
 )
 {
-	if (_cfg.isFunctionArg(_site))
-	{
-		auto const& entryLayout = _layout[_cfg.entry];
-		yulAssert(entryLayout, "entry block has no layout for function-arg def-site");
-		return entryLayout->stackIn;
-	}
 	return replayInsts(_cfg, _layout, _cfg.inst(_site).block, positionInBlock(_cfg, _site) + 1);
+}
+
+/// The stack-in of `_block`, where the `mstore`s of the variables stored on its entry fire
+StackData const& stackInOf(SSACFGStackLayout const& _layout, SSACFG::BlockId const _block)
+{
+	auto const& blockLayout = _layout[_block];
+	yulAssert(blockLayout, fmt::format("block {} has no layout", _block));
+	return blockLayout->stackIn;
+}
+
+/// The depth of the topmost copy of `_slot` on `_stack`
+std::size_t depthOf(StackData const& _stack, StackSlot const& _slot)
+{
+	auto const reversed = _stack | ranges::views::reverse;
+	auto const it = ranges::find(reversed, _slot);
+	yulAssert(it != ranges::end(reversed), fmt::format("{} is not on the stack where it is stored", _slot));
+	return static_cast<std::size_t>(ranges::distance(ranges::begin(reversed), it));
 }
 
 /// The Inst behind which the value `_value` is stored: a projection behind its operation, any other value, including a
@@ -124,6 +139,9 @@ std::vector<DefSite> defSitesFor(
 )
 {
 	bool const sharedWithShadow = _key.isPhiValue() && _spillSet.sharesKeyWithShadow(_key.value());
+	if (_key.isValue() && _cfg.isFunctionArg(_key.value()))
+		// it has no producer operation and lives on the function entry stack
+		return {{_cfg.entry, _key, stackInOf(_layout, _cfg.entry)}};
 	if (_key.isValue() && !sharedWithShadow)
 	{
 		InstId const site = storeSiteOf(_cfg, _key.value());
@@ -149,18 +167,40 @@ void SpillSet::closeUnderReachabilityConstraints(SSACFG const& _cfg, SSACFGStack
 	if (_storeTraces)
 		_storeTraces->clear();
 
-	// work queue over variables that are marked for spillage
-	std::deque<SpillKey> queue;
-	for (SpillKey const key: spilledValues())
-		queue.push_back(key);
-
-	while (!queue.empty())
+	// Several variables can be stored at one site, e.g., the outputs of an operation or the shadow slots written on the
+	// edges into a block, and a store must not reload a variable that is stored after it there. Each round stores the
+	// variables spilled since the previous one, per site the topmost first: a store may then drop the stored variables
+	// above the one it brings up, which are reloadable, and only needs to keep the ones below. The culprits a round
+	// spills are stored in the next round, and the traces of a closure that spills culprits are discarded (see
+	// `StackLayoutGenerator::generate`).
+	std::set<SpillKey> stored;
+	while (true)
 	{
-		SpillKey const key = queue.front();
-		queue.pop_front();
+		std::map<SpillStoreSite, std::pair<StackData, std::vector<StackSlot>>> stores;
+		for (SpillKey const key: m_values)
+			if (stored.insert(key).second)
+				for (auto& [site, slot, defStack]: defSitesFor(_cfg, _layout, *this, key))
+				{
+					auto& [siteStack, slots] = stores[site];
+					siteStack = std::move(defStack);
+					slots.push_back(slot);
+				}
+		if (stores.empty())
+			return;
 
-		for (auto const& [site, slot, defStack]: defSitesFor(_cfg, _layout, *this, key))
-			ensureDefSiteFeasible(slot, site, defStack, queue, _storeTraces);
+		for (auto& [site, siteStores]: stores)
+		{
+			auto& [defStack, slots] = siteStores;
+			ranges::sort(slots, {}, [&](StackSlot const& _slot) { return depthOf(defStack, _slot); });
+			for (std::size_t index = 0; index < slots.size(); ++index)
+				ensureDefSiteFeasible(
+					slots[index],
+					site,
+					defStack,
+					std::vector<StackSlot>(slots.begin() + static_cast<std::ptrdiff_t>(index) + 1, slots.end()),
+					_storeTraces
+				);
+		}
 	}
 }
 
@@ -168,11 +208,14 @@ void SpillSet::ensureDefSiteFeasible(
 	StackSlot const _slot,
 	SpillStoreSite const _site,
 	StackData const& _defStack,
-	std::deque<SpillKey>& _workQueue,
+	std::vector<StackSlot> const& _storedAfter,
 	SpillStoreTraces* _storeTraces)
 {
-	// predicate = spill set minus the owner; the shuffle accumulates discovered culprits here.
+	// predicate = spill set minus the owner and the variables stored after it at the site, i.e., the variables that
+	// are in memory by the time the owner is stored; the shuffle accumulates discovered culprits here.
 	SpillSet spillSetWithoutOwner = without(_slot);
+	for (StackSlot const& sibling: _storedAfter)
+		spillSetWithoutOwner.m_values.erase(keyOf(sibling));
 	// [... defStack ..., _slot]
 	StackData const target = [&]{
 		StackData result;
@@ -192,21 +235,24 @@ void SpillSet::ensureDefSiteFeasible(
 	// - if `_slot` is unreachable, there are > reachable stack depth distinct slots strictly above it and the
 	//   shuffler heuristics should not pick anything that is already too deep as culprit
 	yulAssert(!spillSetWithoutOwner.isSpilled(_slot), "spill-aware shuffle reported the owner as its own blocker");
+	// the variables stored after the owner sit below it on the stack, so they block nothing either
+	for (StackSlot const& sibling: _storedAfter)
+		yulAssert(
+			!spillSetWithoutOwner.isSpilled(sibling),
+			fmt::format("spill-aware shuffle reported {}, which is stored after {}, as a blocker", sibling, _slot)
+		);
 
 	if (_storeTraces)
 	{
 		// the `mstore` consuming the variable from the top concludes the def-site trace
 		result.trace.push_back(ShuffleOp::store(_slot));
-		(*_storeTraces)[_site][_slot] = std::move(result.trace);
+		(*_storeTraces)[_site].emplace_back(_slot, std::move(result.trace));
 	}
 
+	// the culprits are stored in the next round of `closeUnderReachabilityConstraints`
 	for (SpillKey const culprit: spillSetWithoutOwner.spilledValues())
-	{
-		if (isSpilled(culprit))
-			continue;
-		add(culprit);
-		_workQueue.push_back(culprit);
-	}
+		if (!isSpilled(culprit))
+			add(culprit);
 }
 
 SpillSet SpillSet::without(StackSlot const _slot) const

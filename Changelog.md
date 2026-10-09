@@ -11,6 +11,7 @@ Compiler Features:
 
 Bugfixes:
 * General: Fix internal compiler error in the experimental SSA CFG codegen when a phi that follows operations in its block has to be spilled.
+* General: Fix the experimental SSA CFG codegen storing spilled variables that are defined at the same point, such as the return values of a function call, in an order that could read one of them from memory before it was stored.
 * Parser: Fix inverted version pragma range comparison for components in the range [2**31, 2**32).
 
 Build System:

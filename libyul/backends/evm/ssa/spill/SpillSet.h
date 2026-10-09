@@ -25,7 +25,6 @@
 #include <libyul/Exceptions.h>
 
 #include <cstdint>
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
@@ -38,13 +37,15 @@ namespace solidity::yul::ssa::spill
 
 /// Where a spilled variable is stored:
 /// - a value behind its defining Inst (a projection behind its operation, a phi only if it does not share its key with
-///   its shadow slot), and a function argument on function entry, both keyed by the Inst it is stored behind;
-/// - a phi's shadow slot on entry of every block whose incoming edges write it, keyed by the block.
+///   its shadow slot), keyed by the Inst it is stored behind;
+/// - a function argument on function entry and a phi's shadow slot on entry of every block whose incoming edges write
+///   it, keyed by the block.
 using SpillStoreSite = std::variant<BlockId, InstId>;
 
-/// Per site, for each variable stored there the recorded shuffle realizing its store: brings the variable to the
-/// stack top and concludes with the `Store` op consuming it.
-using SpillStoreTraces = std::map<SpillStoreSite, std::map<StackSlot, ShuffleTrace>>;
+/// Per site, the stores there in the order in which they run: for each variable the recorded shuffle realizing its
+/// store, which brings the variable to the stack top and concludes with the `Store` op consuming it. A store never
+/// reloads a variable that is stored after it at the same site, as its memory slot is not written yet.
+using SpillStoreTraces = std::map<SpillStoreSite, std::vector<std::pair<StackSlot, ShuffleTrace>>>;
 
 /// Per-CFG set of variables spilled to memory
 class SpillSet
@@ -86,16 +87,24 @@ public:
 	std::set<SpillKey> const& spilledValues() const { return m_values; }
 
 	/// Finalizes the spill set by making every spilled value's def-site `mstore` reachable.
-	/// If `_storeTraces` is provided, it is rebuilt to hold each spilled value's recorded def-site store trace.
+	/// If `_storeTraces` is provided, it is rebuilt to hold each spilled value's recorded def-site store trace. The
+	/// traces are valid only if the spill set does not grow.
 	void closeUnderReachabilityConstraints(SSACFG const& _cfg, SSACFGStackLayout const& _layout, SpillStoreTraces* _storeTraces = nullptr);
 
 	/// Yields a copy of this spill set minus the key of `_slot`.
 	[[nodiscard]] SpillSet without(StackSlot _slot) const;
 
 private:
-	/// Ensure that the variable `_slot` can be spilled at `_site`, i.e., brought up to the top and `mstore`d.
+	/// Ensure that the variable `_slot` can be spilled at `_site`, i.e., brought up to the top and `mstore`d, without
+	/// reloading `_slot` or any of `_storedAfter`, the variables stored after it at the same site.
 	/// Might populate the spill set with more entries if not possible right away.
-	void ensureDefSiteFeasible(StackSlot _slot, SpillStoreSite _site, StackData const& _defStack, std::deque<SpillKey>& _workQueue, SpillStoreTraces* _storeTraces);
+	void ensureDefSiteFeasible(
+		StackSlot _slot,
+		SpillStoreSite _site,
+		StackData const& _defStack,
+		std::vector<StackSlot> const& _storedAfter,
+		SpillStoreTraces* _storeTraces
+	);
 
 	std::set<SpillKey> m_values;
 	std::shared_ptr<std::set<InstId> const> m_phisSharingShadowKey;

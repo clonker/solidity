@@ -201,11 +201,6 @@ CodeTransform::CodeTransform(
 	for (auto const& arg: m_cfg.arguments | ranges::views::reverse)
 		expectedStackTop.push_back(StackSlot::makeValue(_cfg, arg));
 	assertLayoutCompatibility(m_stack.data(), expectedStackTop);
-
-	// Spilled function args need an `mstore` at function entry so later `mload`s see a populated slot
-	if (m_spillEmitter && isFunctionGraph)
-		for (InstId const argId: m_cfg.arguments)
-			spillStore(argId);
 }
 
 void CodeTransform::operator()(SSACFG::BlockId const _blockId)
@@ -222,7 +217,7 @@ void CodeTransform::operator()(SSACFG::BlockId const _blockId)
 
 	auto const& block = m_cfg.block(_blockId);
 
-	// the spilled shadow slots that the incoming edges write
+	// the spilled function arguments on function entry, and the spilled shadow slots that the incoming edges write
 	spillStore(_blockId);
 
 	// Iterate every Inst in the block in scheduled order with its recorded trace, then store the spilled variables it
