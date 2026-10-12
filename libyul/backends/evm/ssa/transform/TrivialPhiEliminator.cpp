@@ -114,7 +114,7 @@ void removeDeadWrites(SSACFG& _cfg)
 
 void transform::eliminateTrivialPhis(SSACFG& _cfg)
 {
-	// Drop upsilons whose value is Unreachable (dead control-flow predecessor)
+	// Drop upsilons that write an Unreachable value: no path that executes reaches them
 	for (BlockId const blockId: _cfg.liveBlocks())
 		for (InstId const id: _cfg.block(blockId).instructions)
 		{

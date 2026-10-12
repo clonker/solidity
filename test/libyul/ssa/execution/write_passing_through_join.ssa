@@ -35,24 +35,22 @@
 //     v4 = builtin @calldataload v0
 //     v5 = builtin @and v4, v1
 //     v6 = builtin @add v4, v3
-//     branch v5, #1, #5
+//     branch v5, #1, #4
 // #1: preds: #0
 //     v8 = builtin @mul v4, v2
 //     upsilon v8 -> ^v14
 //     builtin @sstore v1, v8
 //     jump #3
-// #2: preds: #5
+// #2: preds: #4
 //     builtin @sstore v2, v4
 //     jump #3
 // #3: preds: #1, #2
 //     v12 = builtin @shr v1, v4
 //     builtin @sstore v3, v12
-//     jump #4
-// #4: preds: #3
 //     v14 = phi
 //     builtin @sstore v0, v14
 //     main_exit
-// #5: preds: #0
+// #4: preds: #0
 //     upsilon v6 -> ^v14
 //     jump #2
 //

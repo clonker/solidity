@@ -156,8 +156,6 @@ memoryguard = 0x80
 //     builtin @sstore v35, v36
 //     builtin @sstore v37, v38
 //     builtin @sstore v39, v40
-//     jump #4
-// #4: preds: #3
 //     v65 = phi
 //     v66 = builtin @add v65, v45
 //     v67 = builtin @add v66, v46

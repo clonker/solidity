@@ -1,0 +1,20 @@
+#0:
+    v0 = const 0x00
+    v1 = const 0x01
+    v3 = builtin @calldataload v0
+    branch v1, #1, #1
+#1: preds: #0, #0
+    builtin @sstore v0, v3
+    main_exit
+// ====
+// calldata: 0 5
+// ----
+// #0:
+//     v0 = const 0x00
+//     v1 = const 0x01
+//     v2 = builtin @calldataload v0
+//     builtin @sstore v0, v2
+//     main_exit
+//
+// calldata 0x00: {}
+// calldata 0x05: {0x00: 0x05}

@@ -57,9 +57,9 @@ public:
 		m_phisSharingShadowKey(std::move(_phisSharingShadowKey))
 	{}
 
-	/// The key under which the variable `_slot` is spilled. A phi's shadow slot shares the phi's key if all of the
-	/// phi's upsilons are lowered on edges: the shadow slot is then written only on entry of the phi's block, where
-	/// the phi is dead, and the phi takes over the memory slot of its shadow slot.
+	/// The key under which the variable `_slot` is spilled. A phi's shadow slot shares the phi's key if no write of
+	/// the shadow lands while the phi is live (see `phisSharingShadowKey`): the phi then takes over the memory slot of
+	/// its shadow slot.
 	SpillKey keyOf(StackSlot const _slot) const
 	{
 		if (_slot.isShadow() && sharesKeyWithShadow(_slot.shadowPhi()))

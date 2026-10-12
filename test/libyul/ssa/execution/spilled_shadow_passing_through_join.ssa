@@ -149,12 +149,12 @@ memoryguard = 0x80
 //     v41 = const 0x13
 //     v42 = builtin @add v4, v41
 //     v43 = builtin @mul v5, v4
-//     branch v4, #1, #5
+//     branch v4, #1, #4
 // #1: preds: #0
 //     v45 = builtin @mul v4, v4
 //     upsilon v45 -> ^v68
 //     jump #3
-// #2: preds: #5
+// #2: preds: #4
 //     builtin @sstore v1, v4
 //     jump #3
 // #3: preds: #1, #2
@@ -178,8 +178,6 @@ memoryguard = 0x80
 //     builtin @sstore v37, v38
 //     builtin @sstore v39, v40
 //     builtin @sstore v41, v42
-//     jump #4
-// #4: preds: #3
 //     v68 = phi
 //     v69 = builtin @add v68, v48
 //     v70 = builtin @add v69, v49
@@ -203,7 +201,7 @@ memoryguard = 0x80
 //     v88 = builtin @add v87, v42
 //     builtin @sstore v0, v88
 //     main_exit
-// #5: preds: #0
+// #4: preds: #0
 //     upsilon v43 -> ^v68
 //     jump #2
 //

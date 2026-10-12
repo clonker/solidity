@@ -53,20 +53,18 @@ func @h(args: (v0, v1)) -> 1 {
 //     v1 = const 0x01
 //     v2 = const 0x02
 //     v3 = builtin @add v0, v2
-//     branch v0, #1, #4
+//     branch v0, #1, #3
 // #1: preds: #0
 //     v5 = call @h v0, v1
 //     upsilon v5 -> ^v9
 //     jump #2
-// #2: preds: #4, #1
+// #2: preds: #3, #1
 //     v7 = call @h v0, v2
 //     builtin @sstore v2, v7
-//     jump #3
-// #3: preds: #2
 //     v9 = phi
 //     v10 = builtin @add v9, v7
 //     return v10
-// #4: preds: #0
+// #3: preds: #0
 //     upsilon v3 -> ^v9
 //     jump #2
 // }
