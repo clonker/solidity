@@ -83,15 +83,13 @@ void transform::foldConstantConditions(SSACFG& _cfg)
 
 		block.exit = SSACFG::BasicBlock::Jump{taken};
 
-		if (dropped != taken)
-		{
-			// Detach the edge blockId -> dropped. The upsilons are writes, not tied to the edge: the ones whose phis go
-			// unreachable are dropped by the unreachable block cleaner.
-			auto& droppedEntries = _cfg.block(dropped).entries;
-			auto const entry = ranges::find(droppedEntries, blockId);
-			yulAssert(entry != droppedEntries.end());
-			droppedEntries.erase(entry);
-		}
+		// Detach the edge blockId -> dropped, also if both edges led to the same block: the block then keeps one entry
+		// for the remaining edge. The upsilons are writes, not tied to the edge: the ones whose phis go unreachable are
+		// dropped by the unreachable block cleaner.
+		auto& droppedEntries = _cfg.block(dropped).entries;
+		auto const entry = ranges::find(droppedEntries, blockId);
+		yulAssert(entry != droppedEntries.end());
+		droppedEntries.erase(entry);
 
 		if (_cfg.isOperation(conditionId) && _cfg.inst(conditionId).block == blockId)
 			if (useCounts.hasSingleUse(conditionId))

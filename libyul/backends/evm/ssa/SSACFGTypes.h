@@ -70,7 +70,7 @@ enum class InstOpcode : std::uint8_t
 {
 	Const,  // literal u256
 	Phi,  // no inputs, retrieves value by mapping
-	Upsilon,  // records phi pre-image at a phi predecessor block
+	Upsilon,  // writes its input into the shadow of its phi
 	BuiltinCall,  // dialect builtin
 	Call,  // user-defined function call
 	Unreachable,  // dead code

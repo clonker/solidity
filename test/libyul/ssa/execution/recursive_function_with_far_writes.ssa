@@ -45,27 +45,25 @@ func @r(args: (v0)) -> 1 {
 //     v0 = arg 0
 //     v1 = const 0x01
 //     v2 = const 0x02
-//     branch v0, #1, #5
+//     branch v0, #1, #4
 // #1: preds: #0
 //     v4 = builtin @sub v0, v1
 //     v5 = call @r v4
 //     v7 = builtin @and v0, v1
-//     branch v7, #2, #6
+//     branch v7, #2, #5
 // #2: preds: #1
 //     v8 = builtin @mul v5, v2
 //     upsilon v8 -> ^v11
 //     jump #3
-// #3: preds: #5, #6, #2
+// #3: preds: #4, #5, #2
 //     builtin @sstore v0, v0
-//     jump #4
-// #4: preds: #3
 //     v11 = phi
 //     v12 = builtin @add v11, v0
 //     return v12
-// #5: preds: #0
+// #4: preds: #0
 //     upsilon v0 -> ^v11
 //     jump #3
-// #6: preds: #1
+// #5: preds: #1
 //     upsilon v5 -> ^v11
 //     jump #3
 // }

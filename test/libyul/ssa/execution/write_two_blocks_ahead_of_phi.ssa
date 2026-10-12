@@ -49,8 +49,6 @@
 // #3: preds: #1, #2
 //     v12 = builtin @mul v4, v4
 //     builtin @sstore v3, v12
-//     jump #4
-// #4: preds: #3
 //     v14 = phi
 //     v15 = builtin @add v14, v4
 //     builtin @sstore v0, v15
