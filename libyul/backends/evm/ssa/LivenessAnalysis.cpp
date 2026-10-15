@@ -18,6 +18,8 @@
 
 #include <libyul/backends/evm/ssa/LivenessAnalysis.h>
 
+#include <libyul/backends/evm/ssa/analysis/DominanceCheck.h>
+
 #include <libsolutil/Visitor.h>
 
 #include <boost/container/flat_map.hpp>
@@ -59,6 +61,7 @@ LivenessAnalysis::LivenessAnalysis(SSACFG const& _cfg):
 	m_liveIns(_cfg.numBlocks()),
 	m_liveOuts(_cfg.numBlocks())
 {
+	analysis::assertDefinitionsDominateUses(m_dfsTree);
 	runDagDfs();
 	for (auto const loopRootNode: m_loopNestingForest.loopRootNodes())
 		runLoopTreeDfs(loopRootNode);
