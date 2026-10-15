@@ -28,7 +28,8 @@ namespace transform
 /// Moves the upsilons of every block with a conditional exit onto the out-edges whose targets have their shadows
 /// live on entry, so that every upsilon sits in a block ending in a jump and the backend can realize it on the edge.
 /// A JUMPI carries no code on its edges, so a new block is inserted on each such edge. An upsilon whose shadow is
-/// live on entry of both targets is copied, and one that no target reads is dropped.
+/// live on entry of both targets is copied, and one that no target reads is dropped. A conditional jump whose two
+/// targets are one block is a jump: its edges cannot be told apart, so it is rewritten into one ahead of that.
 ///
 /// For example, with `^p := x` the upsilon of B for the phi `p` of T, which has another predecessor C:
 ///

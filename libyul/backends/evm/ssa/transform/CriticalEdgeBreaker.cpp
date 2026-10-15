@@ -23,6 +23,7 @@
 
 #include <libyul/Exceptions.h>
 
+#include <range/v3/algorithm/contains.hpp>
 #include <range/v3/algorithm/find.hpp>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/filter.hpp>
@@ -76,10 +77,21 @@ void transform::breakCriticalEdges(SSACFG& _cfg)
 		auto const* conditionalJump = std::get_if<SSACFG::BasicBlock::ConditionalJump>(&_cfg.block(blockId).exit);
 		if (!conditionalJump)
 			continue;
+		if (conditionalJump->zero == conditionalJump->nonZero)
+		{
+			// Both outcomes lead to one block: the edges cannot be told apart, so they are one edge of a jump block,
+			// on which the block's upsilons sit already
+			BlockId const target = conditionalJump->zero;
+			auto& entries = _cfg.block(target).entries;
+			// one entry per edge, so the target lists the block twice
+			entries.erase(ranges::find(entries, blockId));
+			yulAssert(ranges::contains(entries, blockId), "edge target does not list the predecessor once per edge");
+			_cfg.block(blockId).exit = SSACFG::BasicBlock::Jump{target};
+			continue;
+		}
 		std::vector<InstId> const upsilons = _cfg.block(blockId).instructions | ranges::views::filter(isUpsilon) | ranges::to<std::vector>;
 		if (upsilons.empty())
 			continue;
-		yulAssert(conditionalJump->zero != conditionalJump->nonZero, "upsilons in a block with a conditional jump to a single target");
 		// splitting replaces the targets, so they are taken out first
 		std::array<BlockId, 2> const targets{conditionalJump->zero, conditionalJump->nonZero};
 		std::erase_if(_cfg.block(blockId).instructions, isUpsilon);
