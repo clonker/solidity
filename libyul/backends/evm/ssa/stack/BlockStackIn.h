@@ -19,6 +19,7 @@
 #pragma once
 
 #include <libyul/backends/evm/ssa/spill/SpillSet.h>
+#include <libyul/backends/evm/ssa/stack/Shuffler.h>
 
 #include <libyul/backends/evm/ssa/LivenessAnalysis.h>
 #include <libyul/backends/evm/ssa/SSACFG.h>
@@ -39,10 +40,22 @@ struct IncomingEdge
 
 /// Chooses the stack-in of the block `_block` from its incoming forward edges. There must be at least one incoming edge.
 StackData chooseBlockStackIn(
-	SSACFG const& _cfg,
+	LivenessAnalysis const& _liveness,
 	SSACFG::BlockId _block,
 	std::vector<IncomingEdge> const& _edges,
-	LivenessAnalysis::LivenessData const& _liveIn,
+	spill::SpillSet& _spillSet,
+	bool _spillingAllowed
+);
+
+/// Shuffles `_exitStack` across an edge into a block with stack-in `_stackIn`: towards `_stackIn` with the shadow slots
+/// written on the edge (`_writes`, the live writes of the edge's source block) replaced by the inputs of their
+/// upsilons, then renaming those inputs to the shadow slots.
+/// All inputs are in place before the first rename, so the writes of an edge are a parallel copy.
+ShuffleResult shuffleAcrossEdge(
+	SSACFG const& _cfg,
+	StackData _exitStack,
+	StackData const& _stackIn,
+	ShadowLiveness::Writes const& _writes,
 	spill::SpillSet& _spillSet,
 	bool _spillingAllowed
 );
