@@ -43,7 +43,6 @@
 #include <ostream>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace solidity::frontend
@@ -279,13 +278,19 @@ struct CommandLineOptions
 
 	struct Logging
 	{
+		enum class Output
+		{
+			Stderr,
+			Stdout
+		};
+
 		bool operator==(Logging const&) const noexcept = default;
 		bool operator!=(Logging const&) const noexcept = default;
 
 		std::optional<log::Level> globalLevel;
-		std::vector<std::pair<std::string, log::Level>> categoryLevels;
-		/// "stdout" or a file path. Unset means stderr.
-		std::optional<std::string> file;
+		log::LevelSpecs categoryLevels;
+		Output output = Output::Stderr;
+		bool timestamps = true;
 	} logging;
 
 	bool experimental = false;
@@ -335,15 +340,9 @@ private:
 	/// @throws CommandLineValidationError in case of validation errors.
 	void parseInputPathsAndRemappings();
 
-	/// Parses --log-level, --log and --log-file. Every --log prefix must match a category known to
-	/// log::LoggerRegistry.
+	/// Parses --log-level, --log, --log-output and --log-no-timestamps.
 	/// @throws CommandLineValidationError in case of validation errors.
 	void parseLoggingOptions();
-
-	/// Parses a log level in the range [0, log::maxLevel]. @a _context describes where the level was
-	/// given, for the error message.
-	/// @throws CommandLineValidationError if @a _levelString is not a valid level.
-	static log::Level parseLogLevel(std::string const& _levelString, std::string const& _context);
 
 	/// Tries to read from the file @a _input or interprets @a _input literally if that fails.
 	/// It then tries to parse the contents and appends to @a m_options.libraries.

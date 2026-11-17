@@ -53,13 +53,7 @@ public:
 	/// Some of them (like whitespace) are ignored, others (like brackets) are a part of the syntax.
 	static constexpr char NonStepAbbreviations[] = " \n[]:";
 
-	enum class Debug
-	{
-		None,
-		PrintStep,
-		PrintChanges
-	};
-	OptimiserSuite(OptimiserStepContext& _context, Debug _debug = Debug::None): m_context(_context), m_debug(_debug) {}
+	explicit OptimiserSuite(OptimiserStepContext& _context): m_context(_context) {}
 
 	/// The value nullopt for `_expectedExecutionsPerDeployment` represents creation code.
 	static void run(
@@ -90,7 +84,6 @@ public:
 
 private:
 	OptimiserStepContext& m_context;
-	Debug m_debug;
 };
 
 }

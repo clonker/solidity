@@ -53,16 +53,17 @@ static_assert(!isValidCategory("Yul"));
 static_assert(!isValidCategory("yul ssa"));
 static_assert(!isValidCategory("yul/ssa"));
 
-/// Resets the registry before and after each test so the process-wide singleton stays isolated.
-struct LoggerFixture
+/// Resets the process-wide singleton before and after a test that configures it. The other tests
+/// use registries of their own.
+struct SingletonFixture
 {
-	LoggerFixture() { LoggerRegistry::singleton().reset(); }
-	~LoggerFixture() { LoggerRegistry::singleton().reset(); }
+	SingletonFixture() { LoggerRegistry::singleton().reset(); }
+	~SingletonFixture() { LoggerRegistry::singleton().reset(); }
 };
 
 }
 
-BOOST_FIXTURE_TEST_SUITE(LoggerTest, LoggerFixture)
+BOOST_AUTO_TEST_SUITE(LoggerTest)
 
 BOOST_AUTO_TEST_CASE(is_valid_category_agrees_with_regex)
 {
@@ -114,14 +115,15 @@ BOOST_AUTO_TEST_CASE(is_valid_category_agrees_with_regex)
 
 BOOST_AUTO_TEST_CASE(loggers_default_to_off)
 {
-	Logger const& logger = LoggerRegistry::singleton().get("yul.ssa");
+	LoggerRegistry registry;
+	Logger const& logger = registry.get("yul.ssa");
 	for (Level level = 0; level <= maxLevel; ++level)
 		BOOST_CHECK(!logger.shouldLog(level));
 }
 
 BOOST_AUTO_TEST_CASE(higher_level_is_more_verbose)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	Logger const& logger = registry.get("a");
 
 	registry.setLevel("a", 1);
@@ -147,7 +149,7 @@ BOOST_AUTO_TEST_CASE(higher_level_is_more_verbose)
 
 BOOST_AUTO_TEST_CASE(level_zero_messages_are_never_logged)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	Logger const& logger = registry.get("a");
 	registry.setLevel("a", maxLevel);
 	BOOST_CHECK(!logger.shouldLog(0));
@@ -168,7 +170,7 @@ BOOST_AUTO_TEST_CASE(prefix_matches_whole_components)
 
 BOOST_AUTO_TEST_CASE(longest_matching_prefix_wins)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	// Spec example: the global default is set last and does not override the more specific rules.
 	registry.setLevel("yul.ssa", 2);
 	registry.setLevel("yul.ssa.codetransform.shuffler", 0);
@@ -191,7 +193,7 @@ BOOST_AUTO_TEST_CASE(longest_matching_prefix_wins)
 
 BOOST_AUTO_TEST_CASE(result_does_not_depend_on_rule_order)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	std::vector<std::pair<std::string, Level>> rules = {
 		{"", 1},
 		{"yul", 3},
@@ -238,7 +240,7 @@ BOOST_AUTO_TEST_CASE(result_does_not_depend_on_rule_order)
 
 BOOST_AUTO_TEST_CASE(set_level_replaces_rule_for_same_prefix)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	Logger const& logger = registry.get("yul.ssa");
 	registry.setLevel("yul", 3);
 	registry.setLevel("yul", 1);
@@ -248,7 +250,7 @@ BOOST_AUTO_TEST_CASE(set_level_replaces_rule_for_same_prefix)
 
 BOOST_AUTO_TEST_CASE(level_change_propagates_to_existing_loggers)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	Logger const& logger = registry.get("yul.ssa.stacklayout");
 	BOOST_CHECK(!logger.shouldLog(1));
 
@@ -258,14 +260,14 @@ BOOST_AUTO_TEST_CASE(level_change_propagates_to_existing_loggers)
 
 BOOST_AUTO_TEST_CASE(new_logger_picks_up_existing_rules)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	registry.setLevel("yul.ssa", 2);
 	BOOST_CHECK(registry.get("yul.ssa.created_after_rule").shouldLog(2));
 }
 
-BOOST_AUTO_TEST_CASE(define_logger_registers_during_static_initialisation)
+BOOST_FIXTURE_TEST_CASE(define_logger_registers_during_static_initialisation, SingletonFixture)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry& registry = LoggerRegistry::singleton();
 	std::vector<std::string> const categories = registry.categories();
 	BOOST_CHECK(std::is_sorted(categories.begin(), categories.end()));
 	BOOST_CHECK(std::find(categories.begin(), categories.end(), "test.logger.static_registration") != categories.end());
@@ -284,7 +286,7 @@ BOOST_AUTO_TEST_CASE(define_logger_registers_during_static_initialisation)
 
 BOOST_AUTO_TEST_CASE(output_has_time_level_and_category_prefix)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	std::ostringstream out;
 	registry.setOutput(out);
 	registry.setLevel("c", 1);
@@ -298,9 +300,49 @@ BOOST_AUTO_TEST_CASE(output_has_time_level_and_category_prefix)
 	);
 }
 
+BOOST_AUTO_TEST_CASE(timestamps_can_be_disabled)
+{
+	LoggerRegistry registry;
+	std::ostringstream out;
+	registry.setOutput(out);
+	registry.setTimestamps(false);
+	registry.setLevel("yul.ssa", 2);
+
+	Logger const& logger = registry.get("yul.ssa");
+	solLog1(logger, "step={} removed={}", "CSE", 42);
+	solLog2(logger, "no arguments");
+	BOOST_CHECK_EQUAL(out.str(), "[L1 yul.ssa] step=CSE removed=42\n[L2 yul.ssa] no arguments\n");
+
+	registry.reset();
+	registry.setLevel("yul.ssa", 1);
+	out.str("");
+	registry.setOutput(out);
+	solLog1(logger, "x");
+	BOOST_CHECK(out.str().ends_with("s L1 yul.ssa] x\n"));
+}
+
+BOOST_AUTO_TEST_CASE(registries_are_independent)
+{
+	LoggerRegistry first;
+	LoggerRegistry second;
+	std::ostringstream firstOut;
+	std::ostringstream secondOut;
+	first.setOutput(firstOut);
+	second.setOutput(secondOut);
+	first.setTimestamps(false);
+	first.setLevel("a", 1);
+
+	solLog1(first.get("a"), "x");
+	solLog1(second.get("a"), "x");
+	BOOST_CHECK_EQUAL(firstOut.str(), "[L1 a] x\n");
+	BOOST_CHECK(secondOut.str().empty());
+	BOOST_CHECK(second.categories() == std::vector<std::string>{"a"});
+	BOOST_CHECK(!second.matchesAnyCategory("b"));
+}
+
 BOOST_AUTO_TEST_CASE(prefix_carries_message_level_not_logger_level)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	std::ostringstream out;
 	registry.setOutput(out);
 	registry.setLevel("yul.ssa", 3);
@@ -316,7 +358,7 @@ BOOST_AUTO_TEST_CASE(prefix_carries_message_level_not_logger_level)
 
 BOOST_AUTO_TEST_CASE(messages_above_logger_level_are_dropped)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	std::ostringstream out;
 	registry.setOutput(out);
 	registry.setLevel("c", 1);
@@ -329,7 +371,7 @@ BOOST_AUTO_TEST_CASE(messages_above_logger_level_are_dropped)
 
 BOOST_AUTO_TEST_CASE(disabled_logger_does_not_evaluate_arguments)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	std::ostringstream out;
 	registry.setOutput(out);
 
@@ -350,7 +392,7 @@ BOOST_AUTO_TEST_CASE(disabled_logger_does_not_evaluate_arguments)
 
 BOOST_AUTO_TEST_CASE(reset_turns_everything_off)
 {
-	auto& registry = LoggerRegistry::singleton();
+	LoggerRegistry registry;
 	Logger const& logger = registry.get("c");
 	registry.setLevel("", 3);
 	BOOST_CHECK(logger.shouldLog(3));
@@ -359,6 +401,53 @@ BOOST_AUTO_TEST_CASE(reset_turns_everything_off)
 	BOOST_CHECK(!logger.shouldLog(1));
 	// Rules are gone too, so new loggers start off.
 	BOOST_CHECK(!registry.get("c.child").shouldLog(1));
+}
+
+BOOST_AUTO_TEST_CASE(parse_level)
+{
+	BOOST_CHECK(parseLevel("0") == Level{0});
+	BOOST_CHECK(parseLevel("3") == Level{3});
+	BOOST_CHECK(parseLevel("003") == Level{3});
+
+	// Only ASCII digits are accepted: a non-ASCII character, or a digit from another script (full-width
+	// "１", Arabic-Indic "٣"), is rejected.
+	for (std::string const level: {
+		"", "4", "10", "255", "256", "99999999999999999999", "-1", "+1", "x", "1x", "1.0", " 1", "1 ",
+		"😸", "1😸", "１", "٣",
+	})
+		BOOST_CHECK_MESSAGE(!parseLevel(level), "parseLevel(\"" + level + "\") should have failed");
+}
+
+BOOST_AUTO_TEST_CASE(parse_level_specs)
+{
+	auto const specs = parseLevelSpecs("yul.ssa=2,yul.ssa.codetransform=0,yul=3");
+	BOOST_REQUIRE(specs.has_value());
+	BOOST_CHECK((*specs == LevelSpecs{{"yul.ssa", 2}, {"yul.ssa.codetransform", 0}, {"yul", 3}}));
+
+	std::vector<std::pair<std::string, std::string>> const expectedMessages = {
+		{"", "Invalid log spec ''. Expected <prefix>=<level>."},
+		{"yul", "Invalid log spec 'yul'. Expected <prefix>=<level>."},
+		{"yul=1,", "Invalid log spec ''. Expected <prefix>=<level>."},
+		{"yul=", "Invalid log level '' in log spec 'yul='. Expected a number from 0 to 3."},
+		{"yul=4", "Invalid log level '4' in log spec 'yul=4'. Expected a number from 0 to 3."},
+		{"yul=1😸", "Invalid log level '1😸' in log spec 'yul=1😸'. Expected a number from 0 to 3."},
+		{"yul=1=2", "Invalid log level '1=2' in log spec 'yul=1=2'. Expected a number from 0 to 3."},
+		// The global default is not a category.
+		{"=3", "Invalid category prefix '' in log spec '=3'."},
+		{"yul.=1", "Invalid category prefix 'yul.' in log spec 'yul.=1'."},
+		{"Yul=1", "Invalid category prefix 'Yul' in log spec 'Yul=1'."},
+		{" yul=1", "Invalid category prefix ' yul' in log spec ' yul=1'."},
+		{"😸=1", "Invalid category prefix '😸' in log spec '😸=1'."},
+		// The prefix is validated before the level.
+		{"😸=4", "Invalid category prefix '😸' in log spec '😸=4'."},
+		{"yul=1,yul.ssa=2,yul=1", "Category prefix 'yul' is given more than once."},
+	};
+	for (auto const& [input, expectedMessage]: expectedMessages)
+	{
+		auto const result = parseLevelSpecs(input);
+		BOOST_REQUIRE(!result.has_value());
+		BOOST_CHECK_EQUAL(result.error(), expectedMessage);
+	}
 }
 
 BOOST_AUTO_TEST_SUITE_END()

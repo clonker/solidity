@@ -72,6 +72,7 @@
 #include <libyul/backends/evm/NoOutputAssembly.h>
 
 #include <libsolutil/CommonData.h>
+#include <libsolutil/Logger.h>
 #include <libsolutil/Profiler.h>
 
 #include <libyul/CompilabilityChecker.h>
@@ -87,6 +88,8 @@
 using namespace solidity;
 using namespace solidity::yul;
 using namespace std::string_literals;
+
+DEFINE_LOGGER(logger, "yul.opt");
 
 void OptimiserSuite::run(
 	GasMeter const* _meter,
@@ -123,7 +126,7 @@ void OptimiserSuite::run(
 	NameDispenser dispenser{dialect, astRoot, reservedIdentifiers};
 	OptimiserStepContext context{dialect, dispenser, reservedIdentifiers, _expectedExecutionsPerDeployment};
 
-	OptimiserSuite suite(context, Debug::None);
+	OptimiserSuite suite(context);
 
 	// Some steps depend on properties ensured by FunctionHoister, BlockFlattener, FunctionGrouper and
 	// ForLoopInitRewriter. Run them first to be able to run arbitrary sequences safely.
@@ -473,28 +476,28 @@ void OptimiserSuite::runSequence(std::string_view _stepAbbreviations, Block& _as
 
 void OptimiserSuite::runSequence(std::vector<std::string> const& _steps, Block& _ast)
 {
+	// Copying and comparing the AST is expensive, so only do it if the changes are going to be logged.
+	bool const logChanges = logger.shouldLog(3);
 	std::unique_ptr<Block> copy;
-	if (m_debug == Debug::PrintChanges)
+	if (logChanges)
 		copy = std::make_unique<Block>(std::get<Block>(ASTCopier{}(_ast)));
 	for (std::string const& step: _steps)
 	{
-		if (m_debug == Debug::PrintStep)
-			std::cout << "Running " << step << std::endl;
+		solLog2(logger, "Running {}", step);
 
 		{
 			PROFILER_PROBE(step, probe);
 			allSteps().at(step)->run(m_context, _ast);
 		}
 
-		if (m_debug == Debug::PrintChanges)
+		if (logChanges)
 		{
 			// TODO should add switch to also compare variable names!
 			if (SyntacticallyEqual{}.statementEqual(_ast, *copy))
-				std::cout << "== Running " << step << " did not cause changes." << std::endl;
+				solLog3(logger, "{} did not cause changes.", step);
 			else
 			{
-				std::cout << "== Running " << step << " changed the AST." << std::endl;
-				std::cout << AsmPrinter{m_context.dialect}(_ast) << std::endl;
+				solLog3(logger, "{} changed the AST:\n{}", step, AsmPrinter{m_context.dialect}(_ast));
 				copy = std::make_unique<Block>(std::get<Block>(ASTCopier{}(_ast)));
 			}
 		}

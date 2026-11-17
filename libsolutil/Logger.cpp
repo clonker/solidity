@@ -18,29 +18,13 @@
 
 #include <libsolutil/Logger.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include <algorithm>
+#include <charconv>
 #include <iostream>
 
 using namespace solidity::log;
-
-namespace solidity::log
-{
-
-/// Logger owned by the registry, together with the category name and effective level it refers to.
-struct LoggerHandle
-{
-	LoggerHandle(std::string _category, Level _level):
-		category(std::move(_category)),
-		effectiveLevel(_level),
-		logger(&effectiveLevel, category)
-	{}
-
-	std::string category;
-	Level effectiveLevel;
-	Logger logger;
-};
-
-}
 
 bool solidity::log::prefixMatches(std::string_view _prefix, std::string_view _category) noexcept
 {
@@ -49,6 +33,48 @@ bool solidity::log::prefixMatches(std::string_view _prefix, std::string_view _ca
 	return
 		_category.starts_with(_prefix) &&
 		(_category.size() == _prefix.size() || _category[_prefix.size()] == '.');
+}
+
+std::optional<Level> solidity::log::parseLevel(std::string_view _level) noexcept
+{
+	char const* const end = _level.data() + _level.size();
+	unsigned level = 0;
+	auto const [parsedEnd, error] = std::from_chars(_level.data(), end, level);
+	if (error != std::errc{} || parsedEnd != end || level > maxLevel)
+		return std::nullopt;
+	return static_cast<Level>(level);
+}
+
+std::expected<LevelSpecs, std::string> solidity::log::parseLevelSpecs(std::string_view _specs)
+{
+	LevelSpecs result;
+	std::vector<std::string> specs;
+	for (std::string const& spec: boost::split(specs, _specs, boost::is_any_of(",")))
+	{
+		auto const separator = spec.find('=');
+		if (separator == std::string::npos)
+			return std::unexpected(fmt::format("Invalid log spec '{}'. Expected <prefix>=<level>.", spec));
+
+		std::string const prefix = spec.substr(0, separator);
+		if (!isValidCategory(prefix))
+			return std::unexpected(fmt::format("Invalid category prefix '{}' in log spec '{}'.", prefix, spec));
+
+		std::string const levelString = spec.substr(separator + 1);
+		std::optional<Level> const level = parseLevel(levelString);
+		if (!level)
+			return std::unexpected(fmt::format(
+				"Invalid log level '{}' in log spec '{}'. Expected a number from 0 to {}.",
+				levelString,
+				spec,
+				unsigned{maxLevel}
+			));
+
+		if (std::ranges::any_of(result, [&](auto const& _spec) { return _spec.first == prefix; }))
+			return std::unexpected(fmt::format("Category prefix '{}' is given more than once.", prefix));
+
+		result.emplace_back(prefix, *level);
+	}
+	return result;
 }
 
 LoggerRegistry& LoggerRegistry::singleton()
@@ -63,28 +89,26 @@ LoggerRegistry::LoggerRegistry():
 {
 }
 
-LoggerRegistry::~LoggerRegistry() = default;
-
 Logger const& LoggerRegistry::get(std::string_view _category)
 {
 	std::string category{_category};
 	if (
-		auto const loggerHandle = m_loggers.find(category);
-		loggerHandle != m_loggers.end()
+		auto const logger = m_loggers.find(category);
+		logger != m_loggers.end()
 	)
-		return loggerHandle->second->logger;
+		return *logger->second;
 
-	Level const effectiveLevel = computeEffectiveLevel(category);
-	auto [newLoggerHandle, _] = m_loggers.emplace(category, std::make_unique<LoggerHandle>(category, effectiveLevel));
-	return newLoggerHandle->second->logger;
+	// Not make_unique: the constructor is only accessible to the registry.
+	std::unique_ptr<Logger> newLogger(new Logger(*this, category, computeEffectiveLevel(category)));
+	return *m_loggers.emplace(category, std::move(newLogger)).first->second;
 }
 
 void LoggerRegistry::setLevel(std::string_view _prefix, Level _level)
 {
 	m_rules.insert_or_assign(std::string(_prefix), _level);
 
-	for (auto& [category, loggerHandle]: m_loggers)
-		loggerHandle->effectiveLevel = computeEffectiveLevel(category);
+	for (auto& [category, logger]: m_loggers)
+		logger->m_level = computeEffectiveLevel(category);
 }
 
 bool LoggerRegistry::matchesAnyCategory(std::string_view _prefix) const
@@ -109,12 +133,18 @@ void LoggerRegistry::setOutput(std::ostream& _stream)
 	m_output = &_stream;
 }
 
+void LoggerRegistry::setTimestamps(bool _enabled)
+{
+	m_timestamps = _enabled;
+}
+
 void LoggerRegistry::reset()
 {
 	m_rules.clear();
-	for (auto& [category, loggerHandle]: m_loggers)
-		loggerHandle->effectiveLevel = 0;
+	for (auto& [category, logger]: m_loggers)
+		logger->m_level = 0;
 	setOutput(std::cerr);
+	setTimestamps(true);
 }
 
 Level LoggerRegistry::computeEffectiveLevel(std::string_view _category) const
@@ -135,13 +165,26 @@ Level LoggerRegistry::computeEffectiveLevel(std::string_view _category) const
 	}
 }
 
-void LoggerRegistry::write(Level _level, std::string_view _category, std::string const& _message)
+void LoggerRegistry::write(Level _level, std::string_view _category, fmt::string_view _format, fmt::format_args _args)
 {
-	std::chrono::duration<double> const elapsed = std::chrono::steady_clock::now() - m_startTime;
-	(*m_output) << fmt::format("[{:8.3f}s L{} {}] {}\n", elapsed.count(), unsigned{_level}, _category, _message);
+	fmt::memory_buffer line;
+	fmt::appender out(line);
+	if (m_timestamps)
+	{
+		std::chrono::duration<double> const elapsed = std::chrono::steady_clock::now() - m_startTime;
+		fmt::format_to(out, "[{:8.3f}s L{} {}] ", elapsed.count(), unsigned{_level}, _category);
+	}
+	else
+		fmt::format_to(out, "[L{} {}] ", unsigned{_level}, _category);
+	fmt::vformat_to(out, _format, _args);
+	line.push_back('\n');
+
+	m_output->write(line.data(), static_cast<std::streamsize>(line.size()));
+	// The last lines before a crash are the ones that matter.
+	m_output->flush();
 }
 
-void Logger::emitFormatted(Level _level, std::string const& _message) const
+void Logger::vlog(Level _level, fmt::string_view _format, fmt::format_args _args) const
 {
-	LoggerRegistry::singleton().write(_level, m_category, _message);
+	m_registry.write(_level, m_category, _format, _args);
 }

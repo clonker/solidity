@@ -32,8 +32,6 @@
 
 #include <fmt/format.h>
 
-#include <charconv>
-
 using namespace solidity::langutil;
 using namespace solidity::yul;
 
@@ -68,9 +66,10 @@ static std::string const g_strLink = "link";
 static std::string const g_strLSP = "lsp";
 static std::string const g_strLogLevel = "log-level";
 static std::string const g_strLog = "log";
-static std::string const g_strLogFile = "log-file";
-static std::string const g_strLogFileStderr = "stderr";
-static std::string const g_strLogFileStdout = "stdout";
+static std::string const g_strLogOutput = "log-output";
+static std::string const g_strLogOutputStderr = "stderr";
+static std::string const g_strLogOutputStdout = "stdout";
+static std::string const g_strLogNoTimestamps = "log-no-timestamps";
 static std::string const g_strLogListCategories = "log-list-categories";
 static std::string const g_strMachine = "machine";
 static std::string const g_strNoCBORMetadata = "no-cbor-metadata";
@@ -676,9 +675,13 @@ General Information)").c_str(),
 			"supersedes --" + g_strLogLevel + ".").c_str()
 		)
 		(
-			g_strLogFile.c_str(),
-			po::value<std::string>()->value_name(g_strLogFileStderr + "|" + g_strLogFileStdout + "|<path>"),
-			"Where log lines are written, does not accept already existing files. Default: stderr."
+			g_strLogOutput.c_str(),
+			po::value<std::string>()->value_name(g_strLogOutputStderr + "," + g_strLogOutputStdout),
+			"Where log lines are written. Default: stderr."
+		)
+		(
+			g_strLogNoTimestamps.c_str(),
+			"Omit the time since startup from the prefix of the log lines, to make the output reproducible."
 		)
 		(
 			g_strLogListCategories.c_str(),
@@ -1004,63 +1007,51 @@ void CommandLineParser::parseArgs(int _argc, char const* const* _argv)
 	po::notify(m_args);
 }
 
-log::Level CommandLineParser::parseLogLevel(std::string const& _levelString, std::string const& _context)
-{
-	char const* const end = _levelString.data() + _levelString.size();
-	unsigned level = 0;
-	auto const [parsedEnd, error] = std::from_chars(_levelString.data(), end, level);
-	if (error != std::errc{} || parsedEnd != end || level > log::maxLevel)
-		solThrow(
-			CommandLineValidationError,
-			fmt::format("Invalid log level '{}' {}. Expected a number from 0 to {}.", _levelString, _context, unsigned{log::maxLevel})
-		);
-	return static_cast<log::Level>(level);
-}
-
 void CommandLineParser::parseLoggingOptions()
 {
 	if (m_args.contains(g_strLogLevel))
-		m_options.logging.globalLevel = parseLogLevel(m_args[g_strLogLevel].as<std::string>(), "for --" + g_strLogLevel);
-
-	if (m_args.contains(g_strLog))
-		for (std::string const& specs: m_args[g_strLog].as<std::vector<std::string>>())
-		{
-			std::vector<std::string> splitSpecs;
-			for (std::string const& spec: boost::split(splitSpecs, specs, boost::is_any_of(",")))
-			{
-				auto const separator = spec.find('=');
-				if (separator == std::string::npos)
-					solThrow(
-						CommandLineValidationError,
-						"Invalid log spec '" + spec + "' for --" + g_strLog + ". Expected <prefix>=<level>."
-					);
-
-				std::string const prefix = spec.substr(0, separator);
-				log::Level const level = parseLogLevel(spec.substr(separator + 1), "in --" + g_strLog + " spec '" + spec + "'");
-				if (!log::LoggerRegistry::singleton().matchesAnyCategory(prefix))
-					solThrow(
-						CommandLineValidationError,
-						"Log category prefix '" + prefix + "' in --" + g_strLog + " does not match any known category. "
-						"Use --" + g_strLogListCategories + " to list them."
-					);
-				m_options.logging.categoryLevels.emplace_back(prefix, level);
-			}
-		}
-
-	if (m_args.contains(g_strLogFile))
 	{
-		std::string const logFile = m_args[g_strLogFile].as<std::string>();
-		if (logFile.empty())
-			solThrow(CommandLineValidationError, "Empty file name given for --" + g_strLogFile + ".");
-		if (logFile == g_strLogFileStdout && m_options.input.mode == InputMode::StandardJson)
+		std::string const level = m_args[g_strLogLevel].as<std::string>();
+		m_options.logging.globalLevel = log::parseLevel(level);
+		if (!m_options.logging.globalLevel)
 			solThrow(
 				CommandLineValidationError,
-				"--" + g_strLogFile + " " + g_strLogFileStdout + " is not supported in " +
-				g_inputModeName.at(m_options.input.mode) + " mode, which uses the standard output."
+				fmt::format(
+					"Invalid log level '{}' for --{}. Expected a number from 0 to {}.",
+					level,
+					g_strLogLevel,
+					unsigned{log::maxLevel}
+				)
 			);
-		if (logFile != g_strLogFileStderr)
-			m_options.logging.file = logFile;
 	}
+
+	if (m_args.contains(g_strLog))
+	{
+		// Whether a prefix matches a known category is up to CommandLineInterface, which owns the registry.
+		auto const specs = log::parseLevelSpecs(boost::join(m_args[g_strLog].as<std::vector<std::string>>(), ","));
+		if (!specs)
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strLog + ": " + specs.error());
+		m_options.logging.categoryLevels = *specs;
+	}
+
+	if (m_args.contains(g_strLogOutput))
+	{
+		std::string const output = m_args[g_strLogOutput].as<std::string>();
+		if (output == g_strLogOutputStdout)
+		{
+			if (m_options.input.mode == InputMode::StandardJson)
+				solThrow(
+					CommandLineValidationError,
+					"--" + g_strLogOutput + " " + g_strLogOutputStdout + " is not supported in " +
+					g_inputModeName.at(m_options.input.mode) + " mode, which uses the standard output."
+				);
+			m_options.logging.output = CommandLineOptions::Logging::Output::Stdout;
+		}
+		else if (output != g_strLogOutputStderr)
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strLogOutput + ": " + output);
+	}
+
+	m_options.logging.timestamps = !m_args.contains(g_strLogNoTimestamps);
 }
 
 void CommandLineParser::processArgs()
@@ -1211,8 +1202,9 @@ void CommandLineParser::processArgs()
 			"srcmap-runtime",
 			g_strExperimental,
 			g_strLog,
-			g_strLogFile,
 			g_strLogLevel,
+			g_strLogNoTimestamps,
+			g_strLogOutput,
 		};
 
 		for (auto const& [optionName, optionValue]: m_args)

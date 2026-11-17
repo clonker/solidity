@@ -785,8 +785,8 @@ BOOST_AUTO_TEST_CASE(logging_options)
 		"--log-level=2",
 		"--log=test.cli=3,test.cli.logging=0",
 		"--log", "test=1",
-		"--log==3",
-		"--log-file=solc.log",
+		"--log-output=stdout",
+		"--log-no-timestamps",
 	};
 
 	CommandLineOptions expectedOptions;
@@ -798,20 +798,38 @@ BOOST_AUTO_TEST_CASE(logging_options)
 		{"test.cli", 3},
 		{"test.cli.logging", 0},
 		{"test", 1},
-		{"", 3},
 	};
-	expectedOptions.logging.file = "solc.log";
+	expectedOptions.logging.output = CommandLineOptions::Logging::Output::Stdout;
+	expectedOptions.logging.timestamps = false;
 
 	BOOST_TEST(parseCommandLine(commandLine) == expectedOptions);
 	// Parsing alone does not configure the registry; that is up to CommandLineInterface.
 	BOOST_TEST(!testLogger.shouldLog(1));
 }
 
-BOOST_AUTO_TEST_CASE(log_file_stdout_and_stderr)
+BOOST_AUTO_TEST_CASE(log_output)
 {
-	BOOST_CHECK(parseCommandLine({"solc", "contract.sol", "--log-file=stdout"}).logging.file == "stdout");
-	// stderr is the default and is represented by the absence of a file.
-	BOOST_CHECK(!parseCommandLine({"solc", "contract.sol", "--log-file=stderr"}).logging.file.has_value());
+	using Output = CommandLineOptions::Logging::Output;
+	BOOST_CHECK(parseCommandLine({"solc", "contract.sol"}).logging.output == Output::Stderr);
+	BOOST_CHECK(parseCommandLine({"solc", "contract.sol", "--log-output=stderr"}).logging.output == Output::Stderr);
+	BOOST_CHECK(parseCommandLine({"solc", "contract.sol", "--log-output=stdout"}).logging.output == Output::Stdout);
+
+	// Boost rejects an empty value after '=' itself, but passes an empty separate argument through.
+	for (std::string const output: {"solc.log", "Stdout", "stdout ", ""})
+	{
+		std::string const expectedMessage = "Invalid option for --log-output: " + output;
+		BOOST_CHECK_EXCEPTION(
+			parseCommandLine({"solc", "contract.sol", "--log-output", output}),
+			CommandLineValidationError,
+			[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+		);
+	}
+}
+
+BOOST_AUTO_TEST_CASE(log_timestamps)
+{
+	BOOST_CHECK(parseCommandLine({"solc", "contract.sol"}).logging.timestamps);
+	BOOST_CHECK(!parseCommandLine({"solc", "contract.sol", "--log-no-timestamps"}).logging.timestamps);
 }
 
 BOOST_AUTO_TEST_CASE(logging_options_in_other_input_modes)
@@ -819,7 +837,7 @@ BOOST_AUTO_TEST_CASE(logging_options_in_other_input_modes)
 	CommandLineOptions::Logging expectedLogging;
 	expectedLogging.globalLevel = 1;
 	expectedLogging.categoryLevels = {{"test.cli", 2}};
-	expectedLogging.file = "solc.log";
+	expectedLogging.timestamps = false;
 
 	std::vector<std::vector<std::string>> const commandLines = {
 		{"solc", "--standard-json", "input.json"},
@@ -830,7 +848,10 @@ BOOST_AUTO_TEST_CASE(logging_options_in_other_input_modes)
 	};
 	for (std::vector<std::string> commandLine: commandLines)
 	{
-		commandLine.insert(commandLine.end(), {"--log-level=1", "--log=test.cli=2", "--log-file=solc.log"});
+		commandLine.insert(
+			commandLine.end(),
+			{"--log-level=1", "--log=test.cli=2", "--log-output=stderr", "--log-no-timestamps"}
+		);
 		BOOST_CHECK(parseCommandLine(commandLine).logging == expectedLogging);
 	}
 }
@@ -867,7 +888,8 @@ BOOST_AUTO_TEST_CASE(invalid_log_levels)
 		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedEmptyMessage); return true; }
 	);
 
-	std::string const expectedMessage = "Invalid log level '4' in --log spec 'test.cli=4'. Expected a number from 0 to 3.";
+	std::string const expectedMessage =
+		"Invalid option for --log: Invalid log level '4' in log spec 'test.cli=4'. Expected a number from 0 to 3.";
 	BOOST_CHECK_EXCEPTION(
 		parseCommandLine({"solc", "contract.sol", "--log=test.cli=4"}),
 		CommandLineValidationError,
@@ -886,54 +908,60 @@ BOOST_AUTO_TEST_CASE(boundary_log_levels)
 BOOST_AUTO_TEST_CASE(invalid_log_specs)
 {
 	std::map<std::string, std::string> const expectedMessages = {
-		{"test.cli", "Invalid log spec 'test.cli' for --log. Expected <prefix>=<level>."},
-		{"test.cli=1,", "Invalid log spec '' for --log. Expected <prefix>=<level>."},
-		{"test.cli=", "Invalid log level '' in --log spec 'test.cli='. Expected a number from 0 to 3."},
-		{
-			"test.cl=1",
-			"Log category prefix 'test.cl' in --log does not match any known category. Use --log-list-categories to list them."
-		},
-		{
-			"test.cli.logging.child=1",
-			"Log category prefix 'test.cli.logging.child' in --log does not match any known category. "
-			"Use --log-list-categories to list them."
-		},
-		// The level is validated before the prefix, so an unknown prefix does not mask an invalid level.
-		{"a=😸", "Invalid log level '😸' in --log spec 'a=😸'. Expected a number from 0 to 3."},
-		{"test.cli=1😸", "Invalid log level '1😸' in --log spec 'test.cli=1😸'. Expected a number from 0 to 3."},
-		{
-			"😸=1",
-			"Log category prefix '😸' in --log does not match any known category. Use --log-list-categories to list them."
-		},
+		{"test.cli", "Invalid log spec 'test.cli'. Expected <prefix>=<level>."},
+		{"test.cli=1,", "Invalid log spec ''. Expected <prefix>=<level>."},
+		{"test.cli=", "Invalid log level '' in log spec 'test.cli='. Expected a number from 0 to 3."},
+		{"a=😸", "Invalid log level '😸' in log spec 'a=😸'. Expected a number from 0 to 3."},
+		// The global default is set with --log-level.
+		{"=3", "Invalid category prefix '' in log spec '=3'."},
+		{"😸=1", "Invalid category prefix '😸' in log spec '😸=1'."},
+		{"test=1,test=2", "Category prefix 'test' is given more than once."},
 	};
 	for (auto const& [spec, expectedMessage]: expectedMessages)
 		BOOST_CHECK_EXCEPTION(
 			parseCommandLine({"solc", "contract.sol", "--log=" + spec}),
 			CommandLineValidationError,
-			[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+			[&](auto const& _exception)
+			{
+				BOOST_TEST(_exception.what() == "Invalid option for --log: " + expectedMessage);
+				return true;
+			}
 		);
+
+	// A prefix may be given only once, even across occurrences of the option.
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLine({"solc", "contract.sol", "--log=test=1", "--log=test.cli=2,test=2"}),
+		CommandLineValidationError,
+		[&](auto const& _exception)
+		{
+			BOOST_TEST(_exception.what() == "Invalid option for --log: Category prefix 'test' is given more than once.");
+			return true;
+		}
+	);
+}
+
+BOOST_AUTO_TEST_CASE(log_prefixes_are_not_matched_against_known_categories)
+{
+	// That is up to CommandLineInterface, which configures the registry.
+	solidity::log::LevelSpecs const expectedLevels = {{"no.such.category", 1}};
+	BOOST_CHECK(
+		parseCommandLine({"solc", "contract.sol", "--log=no.such.category=1"}).logging.categoryLevels ==
+		expectedLevels
+	);
 }
 
 BOOST_AUTO_TEST_CASE(single_value_log_options_cannot_be_repeated)
 {
-	for (std::string const option: {"--log-level=1", "--log-file=solc.log"})
+	for (std::string const option: {"--log-level=1", "--log-output=stdout"})
 		BOOST_CHECK_THROW(parseCommandLine({"solc", "contract.sol", option, option}), CommandLineValidationError);
 }
 
-BOOST_AUTO_TEST_CASE(log_file_stdout_rejected_when_stdout_is_in_use)
+BOOST_AUTO_TEST_CASE(log_output_stdout_rejected_when_stdout_is_in_use)
 {
-	std::string const expectedStdoutMessage =
-		"--log-file stdout is not supported in standard JSON mode, which uses the standard output.";
+	std::string const expectedMessage =
+		"--log-output stdout is not supported in standard JSON mode, which uses the standard output.";
 	BOOST_CHECK_EXCEPTION(
-		parseCommandLine({"solc", "--standard-json", "--log-file=stdout"}),
-		CommandLineValidationError,
-		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedStdoutMessage); return true; }
-	);
-
-	// Boost rejects an empty value after '=' itself, but passes an empty separate argument through.
-	std::string const expectedMessage = "Empty file name given for --log-file.";
-	BOOST_CHECK_EXCEPTION(
-		parseCommandLine({"solc", "contract.sol", "--log-file", ""}),
+		parseCommandLine({"solc", "--standard-json", "--log-output=stdout"}),
 		CommandLineValidationError,
 		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
 	);

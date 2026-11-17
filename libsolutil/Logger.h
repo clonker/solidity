@@ -31,9 +31,11 @@
 
 #include <chrono>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -74,7 +76,18 @@ constexpr bool isValidCategory(std::string_view _category) noexcept
 /// The empty prefix matches every category.
 bool prefixMatches(std::string_view _prefix, std::string_view _category) noexcept;
 
-struct LoggerHandle;
+/// @returns the level denoted by @a _level, or nullopt if it is not a decimal number from 0 to maxLevel.
+std::optional<Level> parseLevel(std::string_view _level) noexcept;
+
+/// (prefix, level) pairs: the level to apply to every category matching the prefix.
+using LevelSpecs = std::vector<std::pair<std::string, Level>>;
+
+/// Parses a comma-separated list of `<prefix>=<level>` specs, e.g. `yul.ssa=2,yul.ssa.codetransform=0`.
+/// Every prefix must be a valid category name and may be given only once.
+/// @returns the specs in the order given, or an error message.
+std::expected<LevelSpecs, std::string> parseLevelSpecs(std::string_view _specs);
+
+class LoggerRegistry;
 
 class Logger
 {
@@ -84,30 +97,41 @@ public:
 	Logger& operator=(Logger const&) = delete;
 	Logger& operator=(Logger&&) = delete;
 
-	bool shouldLog(Level _level) const noexcept { return _level != 0 && _level <= *m_level; }
+	bool shouldLog(Level _level) const noexcept { return _level != 0 && _level <= m_level; }
 
+	/// Logs without checking the level. Only meant to be called through the solLog macros.
 	template<typename... Args>
-	void log(Level _level, fmt::format_string<Args...> _format, Args&&... _args) const
+	void logUnchecked(Level _level, fmt::format_string<Args...> _format, Args&&... _args) const
 	{
-		emitFormatted(_level, fmt::format(_format, std::forward<Args>(_args)...));
+		// Type-erased, so that no formatting code is instantiated at the call site.
+		vlog(_level, _format.get(), fmt::make_format_args(_args...));
 	}
 
 private:
-	friend struct LoggerHandle;
+	friend class LoggerRegistry;
 
-	Logger(Level const* _level, std::string_view _category) noexcept: m_level(_level), m_category(_category) {}
+	Logger(LoggerRegistry& _registry, std::string _category, Level _level):
+		m_registry(_registry),
+		m_category(std::move(_category)),
+		m_level(_level)
+	{}
 
-	void emitFormatted(Level _level, std::string const& _message) const;
+	void vlog(Level _level, fmt::string_view _format, fmt::format_args _args) const;
 
-	/// Points to the effective level cached in the LoggerHandle owned by the registry.
-	Level const* m_level = nullptr;
-	std::string_view m_category;
+	LoggerRegistry& m_registry;
+	std::string const m_category;
+	/// Effective level, kept up to date by the registry.
+	Level m_level;
 };
 
-/// Process-wide singleton registry of loggers.
+/// Registry of loggers. The compiler uses the process-wide singleton().
 class LoggerRegistry
 {
 public:
+	LoggerRegistry();
+	LoggerRegistry(LoggerRegistry const&) = delete;
+	LoggerRegistry& operator=(LoggerRegistry const&) = delete;
+
 	static LoggerRegistry& singleton();
 
 	/// @returns the logger for @a _category, creating and registering it first if it doesn't exist yet.
@@ -126,23 +150,25 @@ public:
 	/// Directs log output to @a _stream, which must outlive its use by the registry.
 	void setOutput(std::ostream& _stream);
 
+	/// Sets whether the line prefix carries the time since startup. Enabled by default.
+	void setTimestamps(bool _enabled);
+
 	void reset();
 
 private:
-	LoggerRegistry();
-	~LoggerRegistry();
-
 	Level computeEffectiveLevel(std::string_view _category) const;
 
-	/// Writes a line prefixed with "[<seconds since startup>s L<level> <category>]"
-	void write(Level _level, std::string_view _category, std::string const& _message);
+	/// Writes a line prefixed with "[<seconds since startup>s L<level> <category>]", or with
+	/// "[L<level> <category>]" if timestamps are disabled, and flushes the output.
+	void write(Level _level, std::string_view _category, fmt::string_view _format, fmt::format_args _args);
 
 	friend class Logger;
 
 	std::chrono::steady_clock::time_point const m_startTime;
 	std::map<std::string, Level, std::less<>> m_rules;
-	std::unordered_map<std::string, std::unique_ptr<LoggerHandle>> m_loggers;
+	std::unordered_map<std::string, std::unique_ptr<Logger>> m_loggers;
 	std::ostream* m_output;
+	bool m_timestamps = true;
 };
 
 }
@@ -150,13 +176,17 @@ private:
 /// Defines a logger reference bound once to @a dottedCategory, which must be a string literal matching
 /// `[a-z0-9_-]+(\.[a-z0-9_-]+)*`.
 /// Must be used at namespace scope, so that the category is registered during static initialisation, before the CLI is parsed.
+/// The unnamed namespace makes a use anywhere else a compilation error.
 #define DEFINE_LOGGER(variableName, dottedCategory) \
+	namespace \
+	{ \
+	::solidity::log::Logger const& variableName = \
+		::solidity::log::LoggerRegistry::singleton().get(dottedCategory); \
+	} \
 	static_assert( \
 		::solidity::log::isValidCategory(dottedCategory), \
 		"Invalid logger category \"" dottedCategory "\": must match [a-z0-9_-]+(\\.[a-z0-9_-]+)*" \
-	); \
-	static ::solidity::log::Logger const& variableName = \
-		::solidity::log::LoggerRegistry::singleton().get(dottedCategory)
+	)
 
 /// Arguments are only evaluated if the logger is enabled at @a level.
 #define solLog(logger, level, ...) \
@@ -168,7 +198,7 @@ private:
 		); \
 		::solidity::log::Logger const& solLogger_ = (logger); \
 		if (solLogger_.shouldLog(level)) [[unlikely]] \
-			solLogger_.log((level), __VA_ARGS__); \
+			solLogger_.logUnchecked((level), __VA_ARGS__); \
 	} while (0)
 
 #define solLog1(logger, ...) solLog((logger), 1, __VA_ARGS__)
