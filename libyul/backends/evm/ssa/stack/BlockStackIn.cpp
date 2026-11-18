@@ -18,10 +18,10 @@
 
 #include <libyul/backends/evm/ssa/stack/BlockStackIn.h>
 
-#include <libyul/backends/evm/ssa/stack/Shuffler.h>
-
 #include <libyul/backends/evm/ssa/Stack.h>
 #include <libyul/backends/evm/ssa/StackUtils.h>
+
+#include <range/v3/algorithm/replace.hpp>
 
 #include <tuple>
 
@@ -47,6 +47,21 @@ void declareJunk(
 	}
 }
 
+/// The stack-in that `_edge` offers: its stack and the shadow slots of its pending copies, dead slots declared junk
+StackData candidateOf(
+	IncomingEdge const& _edge,
+	LivenessAnalysis::LivenessData const& _liveIn,
+	ShadowLiveness::ShadowSet const& _liveInShadows
+)
+{
+	StackData candidate = _edge.stack;
+	for (PendingCopy const& copy: _edge.pendingCopies)
+		candidate.push_back(copy.shadowSlot);
+	Stack stack(candidate);
+	declareJunk(stack, _liveIn, _liveInShadows);
+	return candidate;
+}
+
 }
 
 StackData stack::chooseBlockStackIn(
@@ -62,24 +77,14 @@ StackData stack::chooseBlockStackIn(
 	StackData stackIn;
 	// The chosen stack-in only affects code quality since every incoming edge is shuffled to it
 	if (_edges.size() == 1)
-	{
 		// pass through
-		stackIn = _edges[0].stack;
-		Stack stack(stackIn);
-		declareJunk(stack, _liveIn, _liveInShadows);
-	}
+		stackIn = candidateOf(_edges[0], _liveIn, _liveInShadows);
 	else
 	{
 		// Pre-compute each parent's proposal
 		std::vector<StackData> proposals(_edges.size());
 		for (std::size_t i = 0; i < _edges.size(); ++i)
-		{
-			proposals[i] = _edges[i].stack;
-			{
-				Stack stack(proposals[i]);
-				declareJunk(stack, _liveIn, _liveInShadows);
-			}
-		}
+			proposals[i] = candidateOf(_edges[i], _liveIn, _liveInShadows);
 		// For each candidate stack-in layout (one parent's proposal), reconcile every parent to it,
 		// discovering the spills needed to make each reconciliation realizable
 		std::vector<std::size_t> cumulativeGas(_edges.size(), 0);
@@ -89,9 +94,8 @@ StackData stack::chooseBlockStackIn(
 			spill::SpillSet candidateSpillSet = _spillSet;
 			for (std::size_t j = 0; j < _edges.size(); ++j)
 			{
-				StackData edgeStack = _edges[j].stack;
-				stack::ShuffleResult const result = stack::shuffle(
-					edgeStack,
+				stack::ShuffleResult const result = stack::shuffleAcrossEdge(
+					_edges[j],
 					proposals[i],
 					candidateSpillSet,
 					_spillingAllowed
@@ -117,4 +121,28 @@ StackData stack::chooseBlockStackIn(
 		stackIn = std::move(proposals[best]);
 	}
 	return stackIn;
+}
+
+ShuffleResult stack::shuffleAcrossEdge(
+	IncomingEdge const& _edge,
+	StackData const& _stackIn,
+	spill::SpillSet& _spillSet,
+	bool const _spillingAllowed
+)
+{
+	StackData target = _stackIn;
+	for (PendingCopy const& copy: _edge.pendingCopies)
+		ranges::replace(target, copy.shadowSlot, copy.input);
+	StackData edgeStack = _edge.stack;
+	ShuffleResult result = shuffle(edgeStack, target, _spillSet, _spillingAllowed);
+	if (result.status != ShuffleResult::Status::Admissible)
+		return result;
+	Stack stack(edgeStack, &result.trace);
+	for (StackOffset offset{0}; offset < _stackIn.size(); ++offset.value)
+		if (_stackIn[offset.value] != target[offset.value])
+		{
+			yulAssert(edgeStack[offset.value] == target[offset.value]);
+			stack.rename(stack.offsetToDepth(offset), _stackIn[offset.value]);
+		}
+	return result;
 }
