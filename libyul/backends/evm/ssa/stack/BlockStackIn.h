@@ -23,6 +23,7 @@
 #include <libyul/backends/evm/ssa/LivenessAnalysis.h>
 #include <libyul/backends/evm/ssa/SSACFG.h>
 #include <libyul/backends/evm/ssa/SSACFGTypes.h>
+#include <libyul/backends/evm/ssa/ShadowLiveness.h>
 
 #include <vector>
 
@@ -37,20 +38,19 @@ struct IncomingEdge
 	StackData stack;
 };
 
-/// Chooses the stack-in of the block `_block` from its incoming forward edges, of which there is at least one. Every
-/// incoming edge is shuffled to the chosen stack afterwards, so the choice only affects code quality, except for the
-/// edge of a conditional jump into its nonZero target, which cannot carry code.
+/// Chooses the stack-in of a block from its incoming forward edges, of which there is at least one. Every incoming
+/// edge is shuffled to the chosen stack afterwards, so the choice only affects code quality, except for the edge of
+/// a conditional jump into its nonZero target, which cannot carry code.
 ///
-/// Each edge offers one candidate: its stack with the phis of the block in place of, or next to, the values the edge
-/// passes for them, and with the slots that are dead on entry to the block declared junk. The candidate of the only
-/// entry of a block is taken as it is. Of several, the one wins that needs the fewest spills to shuffle every edge
-/// into it, then the least gas for these shuffles, then the smallest stack. `_spillSet` grows by the spills of the
-/// winner.
+/// Each edge offers one candidate: its stack with the slots that are dead on entry to the block declared junk. The
+/// candidate of a single edge is taken as it is. Of several, the one wins that needs the fewest spills to shuffle
+/// every edge into it, then the least gas for these shuffles, then the smallest stack. `_spillSet` grows by the
+/// spills of the winner.
 StackData chooseBlockStackIn(
 	SSACFG const& _cfg,
-	SSACFG::BlockId _block,
 	std::vector<IncomingEdge> const& _edges,
 	LivenessAnalysis::LivenessData const& _liveIn,
+	ShadowLiveness::ShadowSet const& _liveInShadows,
 	spill::SpillSet& _spillSet,
 	bool _spillingAllowed
 );

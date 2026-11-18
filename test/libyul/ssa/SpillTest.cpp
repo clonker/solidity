@@ -50,7 +50,9 @@ namespace
 std::string describeCFG(
 	SSACFG const& _cfg,
 	ControlFlowGraphs::FunctionGraphID const _graphID,
-	std::vector<std::pair<SpillKey, u256>> const& _spilled
+	std::vector<std::pair<SpillKey, u256>> const& _spilled,
+	spill::SpillSet const& _spillSet,
+	spill::SpillStoreTraces const& _storeTraces
 )
 {
 	std::string label = _cfg.isMainGraph() ? "<main>" : _cfg.name;
@@ -70,17 +72,17 @@ std::string describeCFG(
 			toCompactHexWithPrefix(address)
 		);
 
+	// the stores as recorded for emission: per site, the slots stored there
 	out += "  mstore schedule:\n";
-	for (const auto& key: _spilled | std::views::keys)
-	{
-		SSACFG::BlockId const block = _cfg.inst(key.value()).block;
-		out += fmt::format(
-			"    mstore addr({}) <- {} (B#{})\n",
-			key,
-			key,
-			block.value
-		);
-	}
+	for (auto const& [site, stores]: _storeTraces)
+		for (StackSlot const& slot: stores | std::views::keys)
+			out += fmt::format(
+				"    mstore addr({}) <- {} (behind {} in B#{})\n",
+				_spillSet.keyOf(slot),
+				slot,
+				_cfg.isUpsilon(site) ? "its upsilon" : slotToString(StackSlot::makeValue(_cfg, site)),
+				_cfg.inst(site).block.value
+			);
 	return out;
 }
 
@@ -135,6 +137,7 @@ frontend::test::TestCase::TestResult SpillTest::run(std::ostream& _stream, std::
 		std::size_t const numCFGs = controlFlowGraphs->functionGraphs.size();
 		std::vector<spill::SpillSet> spillSetsPerCFG;
 		std::vector<SSACFGStackLayout> layouts;
+		std::vector<spill::SpillStoreTraces> storeTracesPerCFG;
 		spillSetsPerCFG.reserve(numCFGs);
 		layouts.reserve(numCFGs);
 
@@ -155,6 +158,7 @@ frontend::test::TestCase::TestResult SpillTest::run(std::ostream& _stream, std::
 			);
 			layouts.push_back(std::move(result.layout));
 			spillSetsPerCFG.push_back(std::move(result.spillSet));
+			storeTracesPerCFG.push_back(std::move(result.spillStoreTraces));
 		}
 
 		for (std::size_t functionIndex = 0; functionIndex < numCFGs; ++functionIndex)
@@ -179,7 +183,7 @@ frontend::test::TestCase::TestResult SpillTest::run(std::ostream& _stream, std::
 			std::vector<std::pair<SpillKey, u256>> spilled;
 			for (SpillKey const key: spillSetsPerCFG[functionIndex].spilledValues())
 				spilled.emplace_back(key, addressing.addressOf(graphID, key));
-			m_obtainedResult += describeCFG(cfg, graphID, spilled);
+			m_obtainedResult += describeCFG(cfg, graphID, spilled, spillSetsPerCFG[functionIndex], storeTracesPerCFG[functionIndex]);
 		}
 
 		for (auto const& subNode: object.subObjects)
