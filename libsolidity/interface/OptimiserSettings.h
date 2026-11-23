@@ -69,24 +69,28 @@ struct OptimiserSettings
 	/// own SSA form and re-pushes literals. Steps elsewhere were dropped as well if that did not
 	/// change the output for a corpus of real-world contracts and for the test inputs in this
 	/// repository. CircularReferencesPruner is kept at the start and at the end, because a
-	/// recursive function can lose its last outside reference at any point.
+	/// recursive function can lose its last outside reference at any point. Four more steps were
+	/// dropped although that changes the output: the first UnusedPruner, SSAReverser, the
+	/// SSATransform before the first run of the full inliner and the
+	/// CommonSubexpressionEliminator at the start of the group before its second run. Without
+	/// them no contract of the corpus is larger and no transaction on it more expensive.
 	/// The last round also shares expressions computing constants. The resulting long-lived
 	/// values can exceed the reachable stack in code without memoryguard, which cannot be
 	/// spilled to memory.
 	static char constexpr DefaultSSACFGYulOptimiserSteps[] =
-		"dDvulnTUI"                    // None of these can make stack problems worse
+		"dDvlnTUI"                     // None of these can make stack problems worse
 
 		"xa[r]scL"                     // Turn into SSA and simplify
-		"Vu [j]"                       // Reverse SSA
+		"u [j]"                        // Prune unused code and join expressions
 
 		// should have good "compilability" property here.
 
 		"Trpeu"                        // Run functional expression inliner
-		"xacL"                         // Turn into SSA again and simplify
+		"xcL"                          // Split expressions and simplify
 		"vi"                           // Run full inliner
 		"caLSsTFtDnca[r]uc"            // SSA plus simplify
 
-		"scCTUt"
+		"sCTUt"
 		"vif"                          // Run full inliner
 		"x[scCTUt] TtnDu"              // Perform structural simplification
 		"vi"                           // Run full inliner
