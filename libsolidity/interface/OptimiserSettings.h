@@ -66,30 +66,33 @@ struct OptimiserSettings
 	/// which only lengthens live ranges, with a last round of common subexpression elimination
 	/// on the fully inlined code and with a shorter tail and clean-up sequence. The steps
 	/// removed from the tail would not change the output, because the code transform builds its
-	/// own SSA form and re-pushes literals.
+	/// own SSA form and re-pushes literals. Steps elsewhere were dropped as well if that did not
+	/// change the output for a corpus of real-world contracts and for the test inputs in this
+	/// repository. CircularReferencesPruner is kept at the start and at the end, because a
+	/// recursive function can lose its last outside reference at any point.
 	/// The last round also shares expressions computing constants. The resulting long-lived
 	/// values can exceed the reachable stack in code without memoryguard, which cannot be
 	/// spilled to memory.
 	static char constexpr DefaultSSACFGYulOptimiserSteps[] =
-		"dfDvulfnTUtnIf"               // None of these can make stack problems worse
+		"dDvulnTUI"                    // None of these can make stack problems worse
 
-		"xa[r]EscL"                    // Turn into SSA and simplify
-		"Vcul [j]"                     // Reverse SSA
+		"xa[r]scL"                     // Turn into SSA and simplify
+		"Vu [j]"                       // Reverse SSA
 
 		// should have good "compilability" property here.
 
-		"Trpeul"                       // Run functional expression inliner
-		"xa[r]cL"                      // Turn into SSA again and simplify
-		"vif"                          // Run full inliner
-		"CTUca[r]LSsTFOtfDnca[r]Iulc"  // SSA plus simplify
+		"Trpeu"                        // Run functional expression inliner
+		"xacL"                         // Turn into SSA again and simplify
+		"vi"                           // Run full inliner
+		"caLSsTFtDnca[r]uc"            // SSA plus simplify
 
 		"scCTUt"
 		"vif"                          // Run full inliner
-		"x[scCTUt] TOntnfDIul"         // Perform structural simplification
-		"vif"                          // Run full inliner
+		"x[scCTUt] TtnDu"              // Perform structural simplification
+		"vi"                           // Run full inliner
 		"xa[r]cE"                      // Turn into SSA once more and share subexpressions
 
-		"jul[jul] cO";                 // Join expressions and prune unused code
+		"jul[j] O";                    // Join expressions and prune unused code
 
 	static char constexpr DefaultSSACFGYulOptimiserCleanupSteps[] = "mu";
 
