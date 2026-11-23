@@ -26,4 +26,4 @@ contract CopyTest {
 // gas irOptimized: 192825
 // gas legacy: 185730
 // gas legacyOptimized: 184457
-// gas ssaCFGOptimized: 192023
+// gas ssaCFGOptimized: 193663

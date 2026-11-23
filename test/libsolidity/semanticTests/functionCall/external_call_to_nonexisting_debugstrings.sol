@@ -31,8 +31,8 @@ contract C {
 // gas legacy code: 682400
 // gas legacyOptimized: 106969
 // gas legacyOptimized code: 386400
-// gas ssaCFGOptimized: 97646
-// gas ssaCFGOptimized code: 271800
+// gas ssaCFGOptimized: 96965
+// gas ssaCFGOptimized code: 264800
 // f(uint256): 0 -> FAILURE, hex"08c379a0", 0x20, 37, "Target contract does not contain", " code"
 // f(uint256): 1 -> FAILURE, hex"08c379a0", 0x20, 37, "Target contract does not contain", " code"
 // f(uint256): 2 -> FAILURE, hex"08c379a0", 0x20, 37, "Target contract does not contain", " code"

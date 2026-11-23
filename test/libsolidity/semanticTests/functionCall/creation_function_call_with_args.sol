@@ -21,6 +21,6 @@ contract D {
 // gas legacy code: 95600
 // gas legacyOptimized: 138297
 // gas legacyOptimized code: 54600
-// gas ssaCFGOptimized: 138459
-// gas ssaCFGOptimized code: 49000
+// gas ssaCFGOptimized: 138002
+// gas ssaCFGOptimized code: 48400
 // f() -> 2

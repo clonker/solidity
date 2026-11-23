@@ -20,5 +20,5 @@ contract B {
 // gas legacy code: 38000
 // gas legacyOptimized: 224863
 // gas legacyOptimized code: 34200
-// gas ssaCFGOptimized: 222214
+// gas ssaCFGOptimized: 222210
 // gas ssaCFGOptimized code: 41600

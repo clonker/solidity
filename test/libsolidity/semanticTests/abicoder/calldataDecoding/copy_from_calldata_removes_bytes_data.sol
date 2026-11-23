@@ -12,7 +12,7 @@ contract c {
 // gas irOptimized: 155119
 // gas legacy: 155473
 // gas legacyOptimized: 155296
-// gas ssaCFGOptimized: 155107
+// gas ssaCFGOptimized: 155115
 // checkIfDataIsEmpty() -> false
 // sendMessage() -> true, 0x40, 0
 // gas irOptimized: 41920

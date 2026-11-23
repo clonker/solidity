@@ -28,7 +28,7 @@ contract C layout at 42 is A {
 // gas irOptimized: 159079
 // gas legacy: 161738
 // gas legacyOptimized: 160218
-// gas ssaCFGOptimized: 159089
+// gas ssaCFGOptimized: 159160
 // open(uint256): 3 -> 0x20, 5, "Empty"
 // open(uint256): 2 -> 0x20, 6, "Locked"
 // open(uint256): 1 -> 0x20, 7, "Monster"

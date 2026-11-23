@@ -89,29 +89,29 @@ contract C {
 // gas irOptimized: 474555
 // gas legacy: 474446
 // gas legacyOptimized: 471535
-// gas ssaCFGOptimized: 474771
+// gas ssaCFGOptimized: 475283
 // copyRecursive() -> 0, 8
 // gas irOptimized: 302153
 // gas legacy: 311024
 // gas legacyOptimized: 302509
-// gas ssaCFGOptimized: 302038
+// gas ssaCFGOptimized: 302204
 // copyFlat() -> 0, 8
 // gas irOptimized: 299370
 // gas legacy: 309978
 // gas legacyOptimized: 299710
-// gas ssaCFGOptimized: 299381
+// gas ssaCFGOptimized: 299503
 // copyRecursiveTwice() -> 0, 0
 // gas irOptimized: 118292
 // gas legacy: 138603
 // gas legacyOptimized: 119205
-// gas ssaCFGOptimized: 117704
+// gas ssaCFGOptimized: 118340
 // copyViaPointer() -> 0, 8
 // gas irOptimized: 106570
 // gas legacy: 116430
 // gas legacyOptimized: 107071
-// gas ssaCFGOptimized: 106292
+// gas ssaCFGOptimized: 106475
 // copyTargetContainsSource() -> 0, 42
 // gas irOptimized: 149123
 // gas legacy: 166950
 // gas legacyOptimized: 149732
-// gas ssaCFGOptimized: 148895
+// gas ssaCFGOptimized: 149286

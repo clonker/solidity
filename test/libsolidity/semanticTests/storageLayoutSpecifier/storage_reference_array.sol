@@ -17,6 +17,6 @@ contract C layout at 42 {
 // gas irOptimized: 273553
 // gas legacy: 274795
 // gas legacyOptimized: 271954
-// gas ssaCFGOptimized: 273425
+// gas ssaCFGOptimized: 273433
 // array(uint256): 0 -> 1
 // array(uint256): 9 -> 10

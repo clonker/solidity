@@ -34,7 +34,7 @@ contract D is A, B, C layout at 42 {
 // gas irOptimized: 110109
 // gas legacy: 111881
 // gas legacyOptimized: 110945
-// gas ssaCFGOptimized: 110203
+// gas ssaCFGOptimized: 110500
 // x() -> 1
 // y() -> 2
 // w() -> 3

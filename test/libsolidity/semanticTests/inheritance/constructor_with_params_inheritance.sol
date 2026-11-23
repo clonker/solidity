@@ -18,7 +18,7 @@ contract D is C {
 // gas legacy code: 32000
 // gas legacyOptimized: 101503
 // gas legacyOptimized code: 17000
-// gas ssaCFGOptimized: 101444
+// gas ssaCFGOptimized: 101392
 // gas ssaCFGOptimized code: 18600
 // i() -> 2
 // k() -> 1

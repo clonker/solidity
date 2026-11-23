@@ -69,5 +69,5 @@ contract Test {
 // gas irOptimized: 110769
 // gas legacy: 112959
 // gas legacyOptimized: 110876
-// gas ssaCFGOptimized: 110775
+// gas ssaCFGOptimized: 110751
 // store() -> 0x01, 0x02, 0x03, 0x04, 0x05, 0x06
