@@ -1,6 +1,6 @@
 {
-    // For the SSA CFG code transform, the limit is 14 instead of 8.
-    mstore(0x40, memoryguard(0x80))
+    // For the SSA CFG code transform, functions smaller than 14 are inlined (without constant
+    // arguments), with and without a memoryguard.
     let x := calldataload(0)
     f(x)
     f(x)
@@ -32,20 +32,19 @@
 //
 // {
 //     {
-//         mstore(0x40, memoryguard(0x80))
 //         let x := calldataload(0)
-//         let a_21 := x
-//         sstore(add(a_21, 1), a_21)
-//         sstore(add(a_21, 2), a_21)
-//         sstore(add(a_21, 3), a_21)
-//         sstore(add(a_21, 4), a_21)
-//         sstore(a_21, a_21)
-//         let a_30 := x
-//         sstore(add(a_30, 1), a_30)
-//         sstore(add(a_30, 2), a_30)
-//         sstore(add(a_30, 3), a_30)
-//         sstore(add(a_30, 4), a_30)
-//         sstore(a_30, a_30)
+//         let a_19 := x
+//         sstore(add(a_19, 1), a_19)
+//         sstore(add(a_19, 2), a_19)
+//         sstore(add(a_19, 3), a_19)
+//         sstore(add(a_19, 4), a_19)
+//         sstore(a_19, a_19)
+//         let a_28 := x
+//         sstore(add(a_28, 1), a_28)
+//         sstore(add(a_28, 2), a_28)
+//         sstore(add(a_28, 3), a_28)
+//         sstore(add(a_28, 4), a_28)
+//         sstore(a_28, a_28)
 //         g(x)
 //         g(x)
 //     }

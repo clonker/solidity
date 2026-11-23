@@ -46,8 +46,10 @@ using namespace solidity::yul;
 
 namespace
 {
-/// The SSA CFG code transform spills to memory where inlined code needs too many stack slots.
-size_t constexpr ssaCFGAggressiveInliningSizeLimit = 14;
+/// Inlining larger functions pays off in gas for the SSA CFG code transform. With memoryguard, it
+/// spills to memory where the inlined code needs too many stack slots. Without, such code can
+/// exceed the reachable stack.
+size_t constexpr ssaCFGInliningSizeLimit = 14;
 }
 
 void FullInliner::run(OptimiserStepContext& _context, Block& _ast)
@@ -250,10 +252,10 @@ bool FullInliner::shallInline(FunctionCall const& _funCall, YulName _callSite)
 			break;
 		}
 
-	size_t const aggressiveSizeLimit = m_targetCodeTransform == TargetCodeTransform::SSACFG ?
-		ssaCFGAggressiveInliningSizeLimit :
-		8u;
-	return (size < (aggressiveInlining ? aggressiveSizeLimit : 6u) || (constantArg && size < (aggressiveInlining ? 16u : 12u)));
+	size_t const sizeLimit = m_targetCodeTransform == TargetCodeTransform::SSACFG ?
+		ssaCFGInliningSizeLimit :
+		(aggressiveInlining ? 8u : 6u);
+	return (size < sizeLimit || (constantArg && size < (aggressiveInlining ? 16u : 12u)));
 }
 
 void FullInliner::tentativelyUpdateCodeSize(YulName _function, YulName _callSite)

@@ -63,9 +63,13 @@ struct OptimiserSettings
 	static char constexpr DefaultYulOptimiserCleanupSteps[] = "fDnTOcmuO";
 
 	/// Default sequence if the SSA CFG code transform is used: without LoopInvariantCodeMotion,
-	/// which only lengthens live ranges, and with a shorter tail and clean-up sequence. The
-	/// removed steps would not change the output, because the code transform builds its own SSA
-	/// form and re-pushes literals.
+	/// which only lengthens live ranges, with a last round of common subexpression elimination
+	/// on the fully inlined code and with a shorter tail and clean-up sequence. The steps
+	/// removed from the tail would not change the output, because the code transform builds its
+	/// own SSA form and re-pushes literals.
+	/// The last round also shares expressions computing constants. The resulting long-lived
+	/// values can exceed the reachable stack in code without memoryguard, which cannot be
+	/// spilled to memory.
 	static char constexpr DefaultSSACFGYulOptimiserSteps[] =
 		"dfDvulfnTUtnIf"               // None of these can make stack problems worse
 
@@ -83,6 +87,7 @@ struct OptimiserSettings
 		"vif"                          // Run full inliner
 		"x[scCTUt] TOntnfDIul"         // Perform structural simplification
 		"vif"                          // Run full inliner
+		"xa[r]cE"                      // Turn into SSA once more and share subexpressions
 
 		"jul[jul] cO";                 // Join expressions and prune unused code
 
