@@ -22,6 +22,7 @@
 #pragma once
 
 #include <libyul/optimiser/ASTWalker.h>
+#include <libyul/optimiser/OptimiserStep.h>
 #include <libyul/YulName.h>
 #include <libyul/Dialect.h>
 #include <libyul/backends/evm/EVMDialect.h>
@@ -48,9 +49,14 @@ class GasMeter;
 class ConstantOptimiser: public ASTModifier
 {
 public:
-	ConstantOptimiser(EVMDialect const& _dialect, GasMeter const& _meter):
+	ConstantOptimiser(
+		EVMDialect const& _dialect,
+		GasMeter const& _meter,
+		TargetCodeTransform _targetCodeTransform
+	):
 		m_dialect(_dialect),
-		m_meter(_meter)
+		m_meter(_meter),
+		m_targetCodeTransform(_targetCodeTransform)
 	{}
 
 	void visit(Expression& _e) override;
@@ -64,6 +70,7 @@ public:
 private:
 	EVMDialect const& m_dialect;
 	GasMeter const& m_meter;
+	TargetCodeTransform const m_targetCodeTransform;
 	std::map<u256, Representation> m_cache;
 };
 
@@ -74,11 +81,13 @@ public:
 	RepresentationFinder(
 		EVMDialect const& _dialect,
 		GasMeter const& _meter,
+		TargetCodeTransform _targetCodeTransform,
 		langutil::DebugData::ConstPtr _debugData,
 		std::map<u256, Representation>& _cache
 	):
 		m_dialect(_dialect),
 		m_meter(_meter),
+		m_targetCodeTransform(_targetCodeTransform),
 		m_debugData(std::move(_debugData)),
 		m_cache(_cache)
 	{}
@@ -100,6 +109,7 @@ private:
 
 	EVMDialect const& m_dialect;
 	GasMeter const& m_meter;
+	TargetCodeTransform const m_targetCodeTransform;
 	langutil::DebugData::ConstPtr m_debugData;
 	/// Counter for the complexity of optimization, will stop when it reaches zero.
 	size_t m_maxSteps = 10000;

@@ -27,6 +27,7 @@
 #include <libevmasm/PeepholeOptimiser.h>
 #include <libevmasm/Inliner.h>
 #include <libevmasm/JumpdestRemover.h>
+#include <libevmasm/JumpThreader.h>
 #include <libevmasm/BlockDeduplicator.h>
 #include <libevmasm/ConstantOptimiser.h>
 
@@ -827,6 +828,11 @@ std::map<u256, u256> const& Assembly::optimiseInternal(
 			}
 		}
 
+		// After the PeepholeOptimiser, which can fold a conditional jump over a jump-only block
+		// into its condition. The threaded blocks are removed in the next iteration.
+		if (_settings.runJumpThreader && JumpThreader{m_items}.optimise())
+			count++;
+
 		// This only modifies PushTags, we have to run again to actually remove code.
 		if (_settings.runDeduplicate)
 		{
@@ -910,7 +916,10 @@ std::map<u256, u256> const& Assembly::optimiseInternal(
 			isCreation(),
 			isCreation() ? 1 : _settings.expectedExecutionsPerDeployment,
 			m_evmVersion,
-			*this
+			*this,
+			_settings.computeShiftedMasks ?
+				ConstantOptimisationMethod::ShiftedMasks::Enabled :
+				ConstantOptimisationMethod::ShiftedMasks::Disabled
 		);
 
 	m_tagReplacements = std::move(tagReplacements);
@@ -1342,7 +1351,7 @@ Assembly const* Assembly::subAssemblyById(SubAssemblyID const _subId) const
 Assembly::OptimiserSettings Assembly::OptimiserSettings::translateSettings(frontend::OptimiserSettings const& _settings)
 {
 	// Constructing it this way so that we notice changes in the fields.
-	OptimiserSettings asmSettings{false,  false, false, false, false, false, 0};
+	OptimiserSettings asmSettings{false,  false, false, false, false, false, false, false, 0};
 	asmSettings.runInliner = _settings.runInliner;
 	asmSettings.runJumpdestRemover = _settings.runJumpdestRemover;
 	asmSettings.runPeephole = _settings.runPeephole;

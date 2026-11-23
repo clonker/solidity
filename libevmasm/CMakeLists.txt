@@ -29,6 +29,8 @@ set(sources
 	Instruction.h
 	JumpdestRemover.cpp
 	JumpdestRemover.h
+	JumpThreader.cpp
+	JumpThreader.h
 	KnownState.cpp
 	KnownState.h
 	LinkerObject.cpp

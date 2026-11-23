@@ -58,7 +58,15 @@ bytes SolidityExecutionFramework::multiSourceCompileContract(
 	m_compiler.setLibraries(_libraryAddresses);
 	m_compiler.setRevertStringBehaviour(m_revertStrings);
 	m_compiler.setEVMVersion(m_evmVersion);
-	m_compiler.setOptimiserSettings(m_optimiserSettings);
+	OptimiserSettings optimiserSettings = m_optimiserSettings;
+	// Use the default sequence of the SSA CFG code transform, as --via-ssa-cfg --optimize does.
+	if (m_compileViaSSACFG && optimiserSettings == OptimiserSettings::full())
+	{
+		optimiserSettings.yulOptimiserSteps = OptimiserSettings::DefaultSSACFGYulOptimiserSteps;
+		optimiserSettings.yulOptimiserCleanupSteps =
+			OptimiserSettings::DefaultSSACFGYulOptimiserCleanupSteps;
+	}
+	m_compiler.setOptimiserSettings(optimiserSettings);
 	m_compiler.setViaIR(m_compileViaYul);
 	m_compiler.setViaSSACFG(m_compileViaSSACFG);
 	m_compiler.setExperimental(m_experimental);

@@ -193,7 +193,8 @@ void FuzzerUtil::testConstantOptimizer(std::string const& _input, bool _quiet)
 				isCreation,
 				runs,
 				langutil::EVMVersion{},
-				tmp
+				tmp,
+				ConstantOptimisationMethod::ShiftedMasks::Enabled
 			);
 		}
 	}

@@ -2524,6 +2524,73 @@ BOOST_AUTO_TEST_CASE(via_ssa_cfg_with_experimental)
 	BOOST_CHECK(!containsError(result, "FatalError", ""));
 }
 
+BOOST_AUTO_TEST_CASE(via_ssa_cfg_optimizer_steps_metadata)
+{
+	std::string const defaultSequence =
+		OptimiserSettings::DefaultYulOptimiserSteps + ":"s + OptimiserSettings::DefaultYulOptimiserCleanupSteps;
+	std::string const ssaCFGDefaultSequence =
+		OptimiserSettings::DefaultSSACFGYulOptimiserSteps + ":"s +
+		OptimiserSettings::DefaultSSACFGYulOptimiserCleanupSteps;
+
+	// Returns the optimizer settings in the metadata after compiling with the given ones.
+	auto metadataOptimizerSettings = [](Json const& _optimizerSettings)
+	{
+		Json input;
+		BOOST_REQUIRE(util::jsonParseStrict(R"(
+		{
+			"language": "Solidity",
+			"sources": {"A.sol": {"content": "contract A { function f() public {} }"}},
+			"settings": {
+				"experimental": true,
+				"viaSSACFG": true,
+				"outputSelection": {"*": {"*": ["metadata"]}}
+			}
+		}
+		)", input));
+		input["settings"]["optimizer"] = _optimizerSettings;
+		frontend::StandardCompiler compiler;
+		Json const result = compiler.compile(input);
+		BOOST_REQUIRE(containsAtMostWarnings(result));
+		Json metadata;
+		BOOST_REQUIRE(util::jsonParseStrict(
+			getContractResult(result, "A.sol", "A")["metadata"].get<std::string>(),
+			metadata
+		));
+		return metadata["settings"]["optimizer"];
+	};
+	auto sequenceInput = [](std::string const& _sequence)
+	{
+		return Json{{"enabled", true}, {"details", {{"yulDetails", {{"optimizerSteps", _sequence}}}}}};
+	};
+
+	std::vector<std::pair<Json, std::optional<std::string>>> const inputsAndExpectedSequences = {
+		{Json{{"enabled", true}}, ssaCFGDefaultSequence},
+		{Json{{"details", {{"yul", true}}}}, ssaCFGDefaultSequence},
+		// An explicitly given sequence is used as is, even if it is the default without viaSSACFG.
+		{sequenceInput(defaultSequence), defaultSequence},
+		{sequenceInput("dhfoDgvulfnTUtnIf:fDn"), "dhfoDgvulfnTUtnIf:fDn"},
+		// Without the Yul optimizer, the metadata lists no sequence.
+		{Json{{"enabled", false}}, std::nullopt},
+		{Json{{"enabled", true}, {"details", {{"yul", false}}}}, std::nullopt},
+	};
+	for (auto const& [optimizerSettings, expectedSequence]: inputsAndExpectedSequences)
+	{
+		Json const recordedSettings = metadataOptimizerSettings(optimizerSettings);
+		if (expectedSequence)
+		{
+			BOOST_CHECK(!recordedSettings.contains("enabled"));
+			BOOST_CHECK_EQUAL(
+				recordedSettings.at("details").at("yulDetails").at("optimizerSteps").get<std::string>(),
+				*expectedSequence
+			);
+		}
+		else
+			BOOST_CHECK(!recordedSettings.contains("details") || !recordedSettings["details"].contains("yulDetails"));
+		// Compiling with the recorded settings reproduces them.
+		BOOST_CHECK_EQUAL(metadataOptimizerSettings(recordedSettings).dump(), recordedSettings.dump());
+	}
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 } // end namespaces

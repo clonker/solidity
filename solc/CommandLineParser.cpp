@@ -281,6 +281,13 @@ OptimiserSettings CommandLineOptions::optimiserSettings() const
 		else
 			solAssert(settings.yulOptimiserCleanupSteps == OptimiserSettings::DefaultYulOptimiserCleanupSteps);
 	}
+	// The SSA CFG code transform has its own default sequence.
+	else if (output.viaSSACFG && settings.runYulOptimiser)
+	{
+		settings.yulOptimiserSteps = OptimiserSettings::DefaultSSACFGYulOptimiserSteps;
+		settings.yulOptimiserCleanupSteps =
+			OptimiserSettings::DefaultSSACFGYulOptimiserCleanupSteps;
+	}
 
 	return settings;
 }

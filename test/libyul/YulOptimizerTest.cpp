@@ -58,6 +58,7 @@ YulOptimizerTest::YulOptimizerTest(std::string const& _filename):
 
 	auto dialectName = m_reader.stringSetting("dialect", "evm");
 	soltestAssert(dialectName == "evm"); // We only have one dialect now
+	m_viaSSACFG = m_reader.boolSetting("viaSSACFG", false);
 
 	m_expectation = m_reader.simpleExpectations();
 }
@@ -68,7 +69,10 @@ TestCase::TestResult YulOptimizerTest::run(std::ostream& _stream, std::string co
 	if (!m_object)
 		return TestResult::FatalError;
 
-	YulOptimizerTestCommon tester(m_object);
+	YulOptimizerTestCommon tester(
+		m_object,
+		m_viaSSACFG ? TargetCodeTransform::SSACFG : TargetCodeTransform::Classic
+	);
 	tester.setStep(m_optimizerStep);
 
 	if (!tester.runStep())

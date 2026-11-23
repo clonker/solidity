@@ -93,7 +93,12 @@ public:
 private:
 	enum Pass { InlineTiny, InlineRest };
 
-	FullInliner(Block& _ast, NameDispenser& _dispenser, Dialect const& _dialect);
+	FullInliner(
+		Block& _ast,
+		NameDispenser& _dispenser,
+		Dialect const& _dialect,
+		TargetCodeTransform _targetCodeTransform
+	);
 	void run(Pass _pass);
 
 	/// @returns a map containing the maximum depths of a call chain starting at each
@@ -122,6 +127,7 @@ private:
 	std::map<YulName, size_t> m_functionSizes;
 	NameDispenser& m_nameDispenser;
 	Dialect const& m_dialect;
+	TargetCodeTransform const m_targetCodeTransform;
 };
 
 /**

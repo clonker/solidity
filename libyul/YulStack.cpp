@@ -360,7 +360,16 @@ YulStack::assembleEVMWithDeployed(std::optional<std::string_view> _deployName, b
 	{
 		compileEVM(adapter, optimize, _viaSSACFG);
 
-		assembly.optimise(evmasm::Assembly::OptimiserSettings::translateSettings(m_optimiserSettings));
+		evmasm::Assembly::OptimiserSettings optimiserSettings =
+			evmasm::Assembly::OptimiserSettings::translateSettings(m_optimiserSettings);
+		// Same condition as for using the SSA CFG code transform in EVMObjectCompiler.
+		if (_viaSSACFG && optimize && m_evmVersion.canOverchargeGasForCall())
+		{
+			// Like the inliner, only with the optimizer enabled.
+			optimiserSettings.runJumpThreader = optimiserSettings.runInliner;
+			optimiserSettings.computeShiftedMasks = true;
+		}
+		assembly.optimise(optimiserSettings);
 
 		std::optional<evmasm::SubAssemblyID> subIndex;
 

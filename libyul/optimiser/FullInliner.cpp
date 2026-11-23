@@ -44,18 +44,30 @@
 using namespace solidity;
 using namespace solidity::yul;
 
+namespace
+{
+/// The SSA CFG code transform spills to memory where inlined code needs too many stack slots.
+size_t constexpr ssaCFGAggressiveInliningSizeLimit = 14;
+}
+
 void FullInliner::run(OptimiserStepContext& _context, Block& _ast)
 {
-	FullInliner inliner{_ast, _context.dispenser, _context.dialect};
+	FullInliner inliner{_ast, _context.dispenser, _context.dialect, _context.targetCodeTransform};
 	inliner.run(Pass::InlineTiny);
 	inliner.run(Pass::InlineRest);
 }
 
-FullInliner::FullInliner(Block& _ast, NameDispenser& _dispenser, Dialect const& _dialect):
+FullInliner::FullInliner(
+	Block& _ast,
+	NameDispenser& _dispenser,
+	Dialect const& _dialect,
+	TargetCodeTransform _targetCodeTransform
+):
 	m_ast(_ast),
 	m_recursiveFunctions(CallGraphGenerator::callGraph(_ast).analyzeCallCycles().recursiveFunctions),
 	m_nameDispenser(_dispenser),
-	m_dialect(_dialect)
+	m_dialect(_dialect),
+	m_targetCodeTransform(_targetCodeTransform)
 {
 
 	// Determine constants
@@ -238,7 +250,10 @@ bool FullInliner::shallInline(FunctionCall const& _funCall, YulName _callSite)
 			break;
 		}
 
-	return (size < (aggressiveInlining ? 8u : 6u) || (constantArg && size < (aggressiveInlining ? 16u : 12u)));
+	size_t const aggressiveSizeLimit = m_targetCodeTransform == TargetCodeTransform::SSACFG ?
+		ssaCFGAggressiveInliningSizeLimit :
+		8u;
+	return (size < (aggressiveInlining ? aggressiveSizeLimit : 6u) || (constantArg && size < (aggressiveInlining ? 16u : 12u)));
 }
 
 void FullInliner::tentativelyUpdateCodeSize(YulName _function, YulName _callSite)

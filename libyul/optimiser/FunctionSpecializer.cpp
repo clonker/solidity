@@ -20,6 +20,7 @@
 
 #include <libyul/optimiser/ASTCopier.h>
 #include <libyul/optimiser/CallGraphGenerator.h>
+#include <libyul/optimiser/Metrics.h>
 #include <libyul/optimiser/NameCollector.h>
 #include <libyul/optimiser/NameDispenser.h>
 
@@ -34,6 +35,13 @@
 
 using namespace solidity::util;
 using namespace solidity::yul;
+
+namespace
+{
+/// A specialized copy of a larger function is not inlined later, and in SSA CFG output, the
+/// block deduplicator does not merge it back.
+size_t constexpr ssaCFGMaxSpecializedFunctionSize = 32;
+}
 
 FunctionSpecializer::LiteralArguments FunctionSpecializer::specializableArguments(
 	FunctionCall const& _f
@@ -61,6 +69,9 @@ void FunctionSpecializer::operator()(FunctionCall& _f)
 		return;
 	yulAssert(std::holds_alternative<Identifier>(_f.functionName));
 	auto& identifier = std::get<Identifier>(_f.functionName);
+
+	if (m_largeFunctions.contains(identifier.name))
+		return;
 
 	LiteralArguments arguments = specializableArguments(_f);
 
@@ -128,9 +139,17 @@ FunctionDefinition FunctionSpecializer::specialize(
 
 void FunctionSpecializer::run(OptimiserStepContext& _context, Block& _ast)
 {
+	std::set<YulName> largeFunctions;
+	if (_context.targetCodeTransform == TargetCodeTransform::SSACFG)
+		for (auto const& statement: _ast.statements)
+			if (auto const* function = std::get_if<FunctionDefinition>(&statement))
+				if (CodeSize::codeSize(function->body) > ssaCFGMaxSpecializedFunctionSize)
+					largeFunctions.insert(function->name);
+
 	FunctionSpecializer f{
 		CallGraphGenerator::callGraph(_ast).analyzeCallCycles().recursiveFunctions,
-		_context.dispenser
+		_context.dispenser,
+		std::move(largeFunctions)
 	};
 	f(_ast);
 

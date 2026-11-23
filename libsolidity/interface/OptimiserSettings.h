@@ -62,6 +62,32 @@ struct OptimiserSettings
 
 	static char constexpr DefaultYulOptimiserCleanupSteps[] = "fDnTOcmuO";
 
+	/// Default sequence if the SSA CFG code transform is used: without LoopInvariantCodeMotion,
+	/// which only lengthens live ranges, and with a shorter tail and clean-up sequence. The
+	/// removed steps would not change the output, because the code transform builds its own SSA
+	/// form and re-pushes literals.
+	static char constexpr DefaultSSACFGYulOptimiserSteps[] =
+		"dfDvulfnTUtnIf"               // None of these can make stack problems worse
+
+		"xa[r]EscL"                    // Turn into SSA and simplify
+		"Vcul [j]"                     // Reverse SSA
+
+		// should have good "compilability" property here.
+
+		"Trpeul"                       // Run functional expression inliner
+		"xa[r]cL"                      // Turn into SSA again and simplify
+		"vif"                          // Run full inliner
+		"CTUca[r]LSsTFOtfDnca[r]Iulc"  // SSA plus simplify
+
+		"scCTUt"
+		"vif"                          // Run full inliner
+		"x[scCTUt] TOntnfDIul"         // Perform structural simplification
+		"vif"                          // Run full inliner
+
+		"jul[jul] cO";                 // Join expressions and prune unused code
+
+	static char constexpr DefaultSSACFGYulOptimiserCleanupSteps[] = "mu";
+
 	/// No optimisations at all - not recommended.
 	static OptimiserSettings none()
 	{

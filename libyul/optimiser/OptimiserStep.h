@@ -31,6 +31,9 @@ class Dialect;
 struct Block;
 class NameDispenser;
 
+/// The Yul to EVM code transform that will consume the optimised code.
+enum class TargetCodeTransform { Classic, SSACFG };
+
 struct OptimiserStepContext
 {
 	Dialect const& dialect;
@@ -38,6 +41,8 @@ struct OptimiserStepContext
 	std::set<YulName> const& reservedIdentifiers;
 	/// The value nullopt represents creation code
 	std::optional<size_t> expectedExecutionsPerDeployment;
+	/// Some steps tune their heuristics to the code transform.
+	TargetCodeTransform targetCodeTransform = TargetCodeTransform::Classic;
 };
 
 

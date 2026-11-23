@@ -38,7 +38,10 @@ namespace solidity::yul::test
 class YulOptimizerTestCommon
 {
 public:
-	explicit YulOptimizerTestCommon(std::shared_ptr<Object const> _obj);
+	explicit YulOptimizerTestCommon(
+		std::shared_ptr<Object const> _obj,
+		TargetCodeTransform _targetCodeTransform
+	);
 	/// Sets optimiser step to be run to @param
 	/// _optimiserStep.
 	void setStep(std::string const& _optimizerStep);
@@ -60,6 +63,7 @@ private:
 	void updateContext(Block const& _block);
 
 	std::string m_optimizerStep;
+	TargetCodeTransform m_targetCodeTransform;
 
 	std::set<YulName> m_reservedIdentifiers;
 	std::unique_ptr<NameDispenser> m_nameDispenser;

@@ -121,7 +121,13 @@ void OptimiserSuite::run(
 	}
 
 	NameDispenser dispenser{dialect, astRoot, reservedIdentifiers};
-	OptimiserStepContext context{dialect, dispenser, reservedIdentifiers, _expectedExecutionsPerDeployment};
+	OptimiserStepContext context{
+		dialect,
+		dispenser,
+		reservedIdentifiers,
+		_expectedExecutionsPerDeployment,
+		usesSSACFGCodeGenerator ? TargetCodeTransform::SSACFG : TargetCodeTransform::Classic
+	};
 
 	OptimiserSuite suite(context, Debug::None);
 
@@ -161,7 +167,7 @@ void OptimiserSuite::run(
 		yulAssert(_meter, "");
 		{
 			PROFILER_PROBE("ConstantOptimiser", probe);
-			ConstantOptimiser{*evmDialect, *_meter}(astRoot);
+			ConstantOptimiser{*evmDialect, *_meter, context.targetCodeTransform}(astRoot);
 		}
 		// The SSA CFG code generator performs its own stack layout and spilling.
 		if (!usesSSACFGCodeGenerator)

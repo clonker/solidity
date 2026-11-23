@@ -31,7 +31,8 @@ unsigned ConstantOptimisationMethod::optimiseConstants(
 	bool _isCreation,
 	std::uint64_t _runs,
 	langutil::EVMVersion _evmVersion,
-	Assembly& _assembly
+	Assembly& _assembly,
+	ShiftedMasks _shiftedMasks
 )
 {
 	// TODO: design the optimiser in a way this is not needed
@@ -53,6 +54,7 @@ unsigned ConstantOptimisationMethod::optimiseConstants(
 		params.isCreation = _isCreation;
 		params.runs = _runs;
 		params.evmVersion = _evmVersion;
+		params.shiftedMasks = _shiftedMasks;
 		LiteralMethod lit(params, item.data());
 		bigint literalGas = lit.gasNeeded();
 		CodeCopyMethod copy(params, item.data());
@@ -251,14 +253,16 @@ AssemblyItems ComputeMethod::findRepresentation(u256 const& _value)
 	if (_value < 0x10000)
 		// Very small value, not worth computing
 		return AssemblyItems{_value};
-	else if (numberEncodingSize(~_value) < numberEncodingSize(_value))
+
+	AssemblyItems routine;
+	if (numberEncodingSize(~_value) < numberEncodingSize(_value))
 		// Negated is shorter to represent
-		return findRepresentation(~_value) + AssemblyItems{Instruction::NOT};
+		routine = findRepresentation(~_value) + AssemblyItems{Instruction::NOT};
 	else
 	{
 		// Decompose value into a * 2**k + b where abs(b) << 2**k
 		// Is not always better, try literal and decomposition method.
-		AssemblyItems routine{u256(_value)};
+		routine = AssemblyItems{u256(_value)};
 		bigint bestGas = gasNeeded(routine);
 		for (unsigned bits = 255; bits > 8 && m_maxSteps > 0; --bits)
 		{
@@ -307,8 +311,26 @@ AssemblyItems ComputeMethod::findRepresentation(u256 const& _value)
 				routine = std::move(newRoutine);
 			}
 		}
-		return routine;
 	}
+
+	// Contiguous ones, i.e. (2**w - 1) << s, can be computed by shifting not(0).
+	if (m_params.shiftedMasks == ShiftedMasks::Enabled && m_params.evmVersion.hasBitwiseShifting())
+	{
+		unsigned shift = static_cast<unsigned>(boost::multiprecision::lsb(_value));
+		u256 ones = _value >> shift;
+		if ((ones & (ones + 1)) == 0)
+		{
+			unsigned width = static_cast<unsigned>(boost::multiprecision::msb(ones)) + 1;
+			AssemblyItems newRoutine{u256(0), Instruction::NOT};
+			if (width + shift < 256)
+				newRoutine += AssemblyItems{u256(256 - width), Instruction::SHR};
+			if (shift > 0)
+				newRoutine += AssemblyItems{u256(shift), Instruction::SHL};
+			if (gasNeeded(newRoutine) < gasNeeded(routine))
+				routine = std::move(newRoutine);
+		}
+	}
+	return routine;
 }
 
 bool ComputeMethod::checkRepresentation(u256 const& _value, AssemblyItems const& _routine) const

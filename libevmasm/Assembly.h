@@ -130,6 +130,12 @@ public:
 		bool runDeduplicate = false;
 		bool runCSE = false;
 		bool runConstantOptimiser = false;
+		/// Redirects jumps to blocks that only jump.
+		/// Only enabled for the output of the SSA CFG code transform so far.
+		bool runJumpThreader = false;
+		/// Lets the constant optimiser compute masks of contiguous ones by shifting not(0).
+		/// Only enabled for the output of the SSA CFG code transform so far.
+		bool computeShiftedMasks = false;
 
 		using ExecutionCount = frontend::OptimiserSettings::ExecutionCount;
 		/// This specifies an estimate on how often each opcode in this assembly will be executed,

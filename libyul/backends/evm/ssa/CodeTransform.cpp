@@ -223,15 +223,18 @@ void CodeTransform::operator()(SSACFG::BlockId const _blockId)
 
 	auto const& block = m_cfg.block(_blockId);
 
+	// Phis are materialized on the block's stackIn, which is also the stack the def-site store traces of
+	// spilled phis were recorded on. The builder schedules a phi at the first read of its variable, possibly
+	// after operations of this block, so the stores cannot be emitted at the phi's scheduled position.
+	// This is a no-op for not spilled phis.
+	m_cfg.forEachPhi(block, [&](InstId const _phi, SSACFG::Inst const&) { spillStore(_phi, _blockId); });
+
 	// Iterate every Inst in the block in scheduled order with its recorded trace. Only Operations advance codegen;
 	// Phis are otherwise pure stack assertions (already materialized on the block's stackIn).
 	yulAssert(blockLayout->operationShuffles.size() == block.instructions.size());
 	for (auto const& [instId, trace]: ranges::views::zip(block.instructions, blockLayout->operationShuffles))
 	{
 		SSACFG::Inst const& inst = m_cfg.inst(instId);
-		if (inst.isPhi())
-			// this is a no-op for not spilled phis
-			spillStore(instId, _blockId);
 		if (inst.isOperation())
 			(*this)(instId, trace, _blockId);
 		else

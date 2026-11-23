@@ -67,10 +67,12 @@ public:
 private:
 	explicit FunctionSpecializer(
 		std::set<FunctionHandle> _recursiveFunctions,
-		NameDispenser& _nameDispenser
+		NameDispenser& _nameDispenser,
+		std::set<YulName> _largeFunctions
 	):
 		m_recursiveFunctions(std::move(_recursiveFunctions)),
-		m_nameDispenser(_nameDispenser)
+		m_nameDispenser(_nameDispenser),
+		m_largeFunctions(std::move(_largeFunctions))
 	{}
 	/// Returns a vector of Expressions, where the index `i` is an expression if the function's
 	/// `i`-th argument can be specialized, nullopt otherwise.
@@ -104,6 +106,8 @@ private:
 	std::set<FunctionHandle> const m_recursiveFunctions;
 
 	NameDispenser& m_nameDispenser;
+	/// Functions that are too large to be specialized.
+	std::set<YulName> const m_largeFunctions;
 };
 
 }

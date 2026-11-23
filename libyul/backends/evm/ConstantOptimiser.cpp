@@ -64,6 +64,8 @@ struct MiniEVMInterpreter
 			return exp256(args.at(0), args.at(1));
 		case evmasm::Instruction::SHL:
 			return args.at(0) > 255 ? 0 : (args.at(1) << unsigned(args.at(0)));
+		case evmasm::Instruction::SHR:
+			return args.at(0) > 255 ? 0 : (args.at(1) >> unsigned(args.at(0)));
 		case evmasm::Instruction::NOT:
 			return ~args.at(0);
 		default:
@@ -98,9 +100,13 @@ void ConstantOptimiser::visit(Expression& _e)
 			return;
 
 		if (
-			Expression const* repr =
-				RepresentationFinder(m_dialect, m_meter, debugDataOf(_e), m_cache)
-				.tryFindRepresentation(literal.value.value())
+			Expression const* repr = RepresentationFinder(
+				m_dialect,
+				m_meter,
+				m_targetCodeTransform,
+				debugDataOf(_e),
+				m_cache
+			).tryFindRepresentation(literal.value.value())
 		)
 			_e = ASTCopier{}.translate(*repr);
 	}
@@ -138,6 +144,28 @@ Representation const& RepresentationFinder::findRepresentation(u256 const& _valu
 	if (numberEncodingSize(~_value) < numberEncodingSize(_value))
 		// Negated is shorter to represent
 		routine = min(std::move(routine), represent(*auxHandles.not_, findRepresentation(~_value)));
+
+	// Contiguous ones, i.e. (2**w - 1) << s, can be computed by shifting not(0).
+	// Only enabled for the SSA CFG code transform so far.
+	if (
+		m_targetCodeTransform == TargetCodeTransform::SSACFG &&
+		m_dialect.evmVersion().hasBitwiseShifting() &&
+		_value != 0
+	)
+	{
+		unsigned shift = static_cast<unsigned>(boost::multiprecision::lsb(_value));
+		u256 ones = _value >> shift;
+		if ((ones & (ones + 1)) == 0)
+		{
+			unsigned width = static_cast<unsigned>(boost::multiprecision::msb(ones)) + 1;
+			Representation newRoutine = represent(*auxHandles.not_, represent(0));
+			if (width + shift < 256)
+				newRoutine = represent(*auxHandles.shr, represent(256 - width), newRoutine);
+			if (shift > 0)
+				newRoutine = represent(*auxHandles.shl, represent(shift), newRoutine);
+			routine = min(std::move(routine), std::move(newRoutine));
+		}
+	}
 
 	// Decompose value into a * 2**k + b where abs(b) << 2**k
 	for (unsigned bits = 255; bits > 8 && m_maxSteps > 0; --bits)

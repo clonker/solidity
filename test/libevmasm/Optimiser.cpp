@@ -27,8 +27,10 @@
 #include <libevmasm/PeepholeOptimiser.h>
 #include <libevmasm/Inliner.h>
 #include <libevmasm/JumpdestRemover.h>
+#include <libevmasm/JumpThreader.h>
 #include <libevmasm/ControlFlowGraph.h>
 #include <libevmasm/BlockDeduplicator.h>
+#include <libevmasm/ConstantOptimiser.h>
 #include <libevmasm/Assembly.h>
 
 #include <boost/test/unit_test.hpp>
@@ -2042,6 +2044,288 @@ BOOST_AUTO_TEST_CASE(inliner_invalid)
 	BOOST_CHECK_EQUAL_COLLECTIONS(
 		items.begin(), items.end(),
 		expectation.begin(), expectation.end()
+	);
+}
+
+BOOST_AUTO_TEST_CASE(jump_threader)
+{
+	AssemblyItem jumpInto{Instruction::JUMP};
+	jumpInto.setJumpType(AssemblyItem::JumpType::IntoFunction);
+	AssemblyItem jumpOutOf{Instruction::JUMP};
+	jumpOutOf.setJumpType(AssemblyItem::JumpType::OutOfFunction);
+	// Tag 1 is reached by a conditional jump and as a return label.
+	AssemblyItems items{
+		AssemblyItem(PushTag, 1),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 1),
+		AssemblyItem(PushTag, 3),
+		jumpInto,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 2),
+		Instruction::STOP,
+		AssemblyItem(Tag, 3),
+		jumpOutOf,
+	};
+	AssemblyItems expectation{
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 2),
+		AssemblyItem(PushTag, 3),
+		jumpInto,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 2),
+		Instruction::STOP,
+		AssemblyItem(Tag, 3),
+		jumpOutOf,
+	};
+	BOOST_REQUIRE(JumpThreader{items}.optimise());
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		items.begin(), items.end(),
+		expectation.begin(), expectation.end()
+	);
+	BOOST_CHECK(items[4].getJumpType() == AssemblyItem::JumpType::IntoFunction);
+	BOOST_CHECK(items[11].getJumpType() == AssemblyItem::JumpType::OutOfFunction);
+}
+
+BOOST_AUTO_TEST_CASE(jump_threader_chain)
+{
+	// Chain 4 -> 1 -> 2 -> 3, where tags 4 and 5 share a block.
+	AssemblyItems items{
+		AssemblyItem(PushTag, 4),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 5),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 2),
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 3),
+		Instruction::STOP,
+		AssemblyItem(Tag, 4),
+		AssemblyItem(Tag, 5),
+		AssemblyItem(PushTag, 1),
+		Instruction::JUMP,
+	};
+	AssemblyItems expectation{
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 2),
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 3),
+		Instruction::STOP,
+		AssemblyItem(Tag, 4),
+		AssemblyItem(Tag, 5),
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMP,
+	};
+	BOOST_REQUIRE(JumpThreader{items}.optimise());
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		items.begin(), items.end(),
+		expectation.begin(), expectation.end()
+	);
+}
+
+BOOST_AUTO_TEST_CASE(jump_threader_cycle)
+{
+	// Cycle 1 -> 2 -> 1, chain 3 -> 1 into the cycle and self-loop 4 -> 4 stay as they are.
+	AssemblyItems items{
+		AssemblyItem(PushTag, 3),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 4),
+		Instruction::JUMPI,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 2),
+		AssemblyItem(PushTag, 1),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 3),
+		AssemblyItem(PushTag, 1),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 4),
+		AssemblyItem(PushTag, 4),
+		Instruction::JUMP,
+	};
+	AssemblyItems expectation = items;
+	BOOST_CHECK(!JumpThreader{items}.optimise());
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		items.begin(), items.end(),
+		expectation.begin(), expectation.end()
+	);
+}
+
+BOOST_AUTO_TEST_CASE(jump_threader_no_ordinary_local_jump)
+{
+	// Neither a jump into a function nor a jump to a tag of a sub-assembly is threaded.
+	AssemblyItem jumpInto{Instruction::JUMP};
+	jumpInto.setJumpType(AssemblyItem::JumpType::IntoFunction);
+	AssemblyItems items{
+		AssemblyItem(PushTag, 1),
+		Instruction::JUMPI,
+		AssemblyItem(PushTag, 2),
+		Instruction::JUMPI,
+		Instruction::STOP,
+		AssemblyItem(Tag, 1),
+		AssemblyItem(PushTag, 3),
+		jumpInto,
+		AssemblyItem(Tag, 2),
+		AssemblyItem(Tag, 3).toSubAssemblyTag(SubAssemblyID{0}),
+		Instruction::JUMP,
+		AssemblyItem(Tag, 3),
+		Instruction::STOP,
+	};
+	AssemblyItems expectation = items;
+	BOOST_CHECK(!JumpThreader{items}.optimise());
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		items.begin(), items.end(),
+		expectation.begin(), expectation.end()
+	);
+}
+
+BOOST_AUTO_TEST_CASE(jump_threader_tags_referenced_from_outside)
+{
+	// A jump-only block that is referenced from the parent assembly is kept, but local
+	// references to it are threaded. Tag replacements are not reported to the parent.
+	Assembly::OptimiserSettings settings;
+	settings.runInliner = true;
+	settings.runJumpdestRemover = true;
+	settings.runPeephole = true;
+	settings.runJumpThreader = true;
+	settings.expectedExecutionsPerDeployment = OptimiserSettings{}.expectedExecutionsPerDeployment;
+
+	auto const evmVersion = CommonOptions::get().evmVersion();
+	Assembly main{evmVersion, true, {}};
+	AssemblyPointer sub = std::make_shared<Assembly>(evmVersion, false, std::string{});
+
+	auto t1 = sub->newTag();
+	auto t2 = sub->newTag();
+	auto t3 = sub->newTag();
+	sub->append(Instruction::CALLVALUE);
+	sub->append(t1.pushTag());
+	sub->append(Instruction::JUMPI);
+	sub->append(Instruction::CALLDATASIZE);
+	sub->append(t2.pushTag());
+	sub->append(Instruction::JUMPI);
+	sub->append(Instruction::STOP);
+	sub->append(t3);
+	sub->append(u256(0x42));
+	sub->append(u256(0));
+	sub->append(Instruction::SSTORE);
+	sub->append(Instruction::STOP);
+	sub->append(t1); // Referenced from outside, will be kept.
+	sub->append(t3.pushTag());
+	sub->append(Instruction::JUMP);
+	sub->append(t2); // Only referenced locally, will be removed.
+	sub->append(t3.pushTag());
+	sub->append(Instruction::JUMP);
+
+	SubAssemblyID subId{main.appendSubroutine(sub).data()};
+	main.append(t1.toSubAssemblyTag(subId));
+
+	main.optimise(settings);
+
+	AssemblyItems expectationMain{
+		AssemblyItem(PushSubSize, 0),
+		t1.toSubAssemblyTag(subId).pushTag(),
+	};
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		main.items().begin(), main.items().end(),
+		expectationMain.begin(), expectationMain.end()
+	);
+
+	AssemblyItems expectationSub{
+		Instruction::CALLVALUE, t3.pushTag(), Instruction::JUMPI,
+		Instruction::CALLDATASIZE, t3.pushTag(), Instruction::JUMPI,
+		Instruction::STOP,
+		t3.tag(), u256(0x42), u256(0), Instruction::SSTORE, Instruction::STOP,
+		t1.tag(), t3.pushTag(), Instruction::JUMP
+	};
+	BOOST_CHECK_EQUAL_COLLECTIONS(
+		sub->items().begin(), sub->items().end(),
+		expectationSub.begin(), expectationSub.end()
+	);
+}
+
+BOOST_AUTO_TEST_CASE(constant_optimiser_contiguous_ones)
+{
+	using ShiftedMasks = ConstantOptimisationMethod::ShiftedMasks;
+	auto check = [](
+		u256 const& _value,
+		AssemblyItems const& _expectation,
+		EVMVersion _evmVersion,
+		ShiftedMasks _shiftedMasks = ShiftedMasks::Enabled
+	)
+	{
+		Assembly assembly{_evmVersion, false, {}};
+		assembly.append(_value);
+		ConstantOptimisationMethod::optimiseConstants(
+			false,
+			OptimiserSettings{}.expectedExecutionsPerDeployment,
+			_evmVersion,
+			assembly,
+			_shiftedMasks
+		);
+		BOOST_CHECK_EQUAL_COLLECTIONS(
+			assembly.items().begin(), assembly.items().end(),
+			_expectation.begin(), _expectation.end()
+		);
+	};
+	u256 const ones = ~u256(0);
+	EVMVersion const shanghai = EVMVersion::shanghai();
+
+	// Low mask (s = 0).
+	check(ones >> 96, {u256(0), Instruction::NOT, u256(96), Instruction::SHR}, shanghai);
+	// w = 255.
+	check(ones >> 1, {u256(0), Instruction::NOT, u256(1), Instruction::SHR}, shanghai);
+	// High mask (w + s = 256).
+	check(ones << 160, {u256(0), Instruction::NOT, u256(160), Instruction::SHL}, shanghai);
+	// Mask in the middle needs both shifts.
+	check(
+		(ones >> 128) << 64,
+		{u256(0), Instruction::NOT, u256(128), Instruction::SHR, u256(64), Instruction::SHL},
+		shanghai
+	);
+	// All ones (w = 256) is negated zero, as before.
+	check(ones, {u256(0), Instruction::NOT}, shanghai);
+	// A single bit (w = 1) is cheaper as shifted one.
+	check(u256(1) << 200, {u256(1), u256(200), Instruction::SHL}, shanghai);
+	check(u256(1) << 255, {u256(1), u256(255), Instruction::SHL}, shanghai);
+	// Without PUSH0, zero is pushed by PUSH1.
+	check(
+		ones >> 96,
+		{u256(0), Instruction::NOT, u256(96), Instruction::SHR},
+		EVMVersion::london()
+	);
+	// Without shifts, the literal is kept.
+	check(ones >> 96, {ones >> 96}, EVMVersion::byzantium());
+	// If not enabled, masks are decomposed as other values.
+	check(
+		ones >> 96,
+		{u256(1), u256(1), u256(160), Instruction::SHL, Instruction::SUB},
+		shanghai,
+		ShiftedMasks::Disabled
+	);
+	check(
+		ones << 160,
+		{u256(1), u256(1), u256(160), Instruction::SHL, Instruction::SUB, Instruction::NOT},
+		shanghai,
+		ShiftedMasks::Disabled
 	);
 }
 

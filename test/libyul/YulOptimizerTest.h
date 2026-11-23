@@ -56,6 +56,7 @@ private:
 	);
 
 	std::string m_optimizerStep;
+	bool m_viaSSACFG = false;
 
 	std::shared_ptr<Object> m_object;
 };

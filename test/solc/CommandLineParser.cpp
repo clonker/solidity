@@ -513,6 +513,37 @@ BOOST_AUTO_TEST_CASE(default_optimiser_sequence)
 	BOOST_CHECK_EQUAL(commandLineOptions.optimiserSettings().yulOptimiserCleanupSteps, OptimiserSettings::DefaultYulOptimiserCleanupSteps);
 }
 
+BOOST_AUTO_TEST_CASE(via_ssa_cfg_optimiser_sequence)
+{
+	std::string const defaultSequence =
+		std::string(OptimiserSettings::DefaultYulOptimiserSteps) + ":" +
+		OptimiserSettings::DefaultYulOptimiserCleanupSteps;
+	std::string const ssaCFGDefaultSequence =
+		std::string(OptimiserSettings::DefaultSSACFGYulOptimiserSteps) + ":" +
+		OptimiserSettings::DefaultSSACFGYulOptimiserCleanupSteps;
+
+	for (std::string const inputModeFlag: {"", "--strict-assembly"})
+	{
+		auto sequence = [&](std::vector<std::string> const& _optimizerFlags)
+		{
+			std::vector<std::string> commandLine = {"solc", inputModeFlag, "--experimental", "--via-ssa-cfg"};
+			commandLine += _optimizerFlags;
+			commandLine.emplace_back("file");
+			OptimiserSettings const settings = parseCommandLine(commandLine).optimiserSettings();
+			return settings.yulOptimiserSteps + ":" + settings.yulOptimiserCleanupSteps;
+		};
+
+		BOOST_CHECK_EQUAL(sequence({"--optimize"}), ssaCFGDefaultSequence);
+		BOOST_CHECK_EQUAL(sequence({"--optimize-yul"}), ssaCFGDefaultSequence);
+		// An explicitly given sequence is used as is, even if it is the default without --via-ssa-cfg.
+		BOOST_CHECK_EQUAL(sequence({"--optimize", "--yul-optimizations", defaultSequence}), defaultSequence);
+		BOOST_CHECK_EQUAL(sequence({"--optimize", "--yul-optimizations", "dhfoDgvulfnTUtnIf:fDn"}), "dhfoDgvulfnTUtnIf:fDn");
+		// Without the Yul optimizer, the sequence is not used and stays at the default.
+		BOOST_CHECK_EQUAL(sequence({}), defaultSequence);
+		BOOST_CHECK_EQUAL(sequence({"--optimize", "--no-optimize-yul"}), defaultSequence);
+	}
+}
+
 BOOST_AUTO_TEST_CASE(valid_optimiser_sequences)
 {
 	std::vector<std::string> validSequenceInputs {

@@ -77,7 +77,11 @@ using namespace solidity::yul;
 using namespace solidity::yul::test;
 using namespace solidity::frontend;
 
-YulOptimizerTestCommon::YulOptimizerTestCommon(std::shared_ptr<Object const> _obj):
+YulOptimizerTestCommon::YulOptimizerTestCommon(
+	std::shared_ptr<Object const> _obj,
+	TargetCodeTransform _targetCodeTransform
+):
+	m_targetCodeTransform(_targetCodeTransform),
 	m_object(_obj),
 	m_optimizedObject(std::make_shared<Object>(*_obj))
 {
@@ -105,7 +109,11 @@ YulOptimizerTestCommon::YulOptimizerTestCommon(std::shared_ptr<Object const> _ob
 			auto block = std::get<Block>(ASTCopier{}(m_object->code()->root()));
 			updateContext(block);
 			GasMeter meter(dynamic_cast<EVMDialect const&>(*m_object->dialect()), false, 200);
-			ConstantOptimiser{dynamic_cast<EVMDialect const&>(*m_object->dialect()), meter}(block);
+			ConstantOptimiser{
+				dynamic_cast<EVMDialect const&>(*m_object->dialect()),
+				meter,
+				m_targetCodeTransform
+			}(block);
 			return block;
 		}},
 		{"varDeclInitializer", [&]() {
@@ -502,7 +510,7 @@ bool YulOptimizerTestCommon::runStep()
 		for (auto const& [ix, subNode]: m_object->subObjects | ranges::views::enumerate)
 			if (auto const subObject = std::dynamic_pointer_cast<Object const>(subNode))
 			{
-				YulOptimizerTestCommon subTest(subObject);
+				YulOptimizerTestCommon subTest(subObject, m_targetCodeTransform);
 				subTest.setStep(m_optimizerStep);
 				subTest.run();
 				auto const optimizedSubObject = std::dynamic_pointer_cast<Object>(m_optimizedObject->subObjects[ix]);
@@ -566,7 +574,8 @@ void YulOptimizerTestCommon::updateContext(Block const& _block)
 		*m_object->dialect(),
 		*m_nameDispenser,
 		m_reservedIdentifiers,
-		frontend::OptimiserSettings::standard().expectedExecutionsPerDeployment
+		frontend::OptimiserSettings::standard().expectedExecutionsPerDeployment,
+		m_targetCodeTransform
 	});
 }
 

@@ -44,6 +44,9 @@ class Assembly;
 class ConstantOptimisationMethod
 {
 public:
+	/// Whether masks of contiguous ones, i.e. (2**w - 1) << s, may be computed by shifting not(0).
+	enum class ShiftedMasks { Disabled, Enabled };
+
 	/// Tries to optimised how constants are represented in the source code and modifies
 	/// @a _assembly.
 	/// @returns zero if no optimisations could be performed.
@@ -51,7 +54,8 @@ public:
 		bool _isCreation,
 		std::uint64_t _runs,
 		langutil::EVMVersion _evmVersion,
-		Assembly& _assembly
+		Assembly& _assembly,
+		ShiftedMasks _shiftedMasks
 	);
 
 protected:
@@ -63,6 +67,7 @@ protected:
 		std::uint64_t runs; ///< Estimated number of calls per opcode oven the lifetime of the contract.
 		size_t multiplicity; ///< Number of times the constant appears in the code.
 		langutil::EVMVersion evmVersion; ///< Version of the EVM
+		ShiftedMasks shiftedMasks; ///< Whether masks may be computed by shifting not(0).
 	};
 
 	explicit ConstantOptimisationMethod(Params const& _params, u256 const& _value):
